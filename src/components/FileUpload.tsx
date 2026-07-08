@@ -124,7 +124,7 @@ export default function FileUpload({ onDataParsed, isProcessing, setIsProcessing
                 Processing...
               </>
             ) : (
-              'Convert to Excel'
+              'Submit'
             )}
           </button>
         </div>

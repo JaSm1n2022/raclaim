@@ -19,6 +19,8 @@
     "axios": "^0.21.1",
     "dayjs": "^1.11.20",
     "dotenv": "^16.4.5",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "koa": "^2.15.0",
     "koa-body": "^6.0.1",
     "lucide-react": "^0.344.0",
