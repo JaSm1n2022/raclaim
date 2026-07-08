@@ -1,0 +1,6 @@
+{
+  "watch": ["api"],
+  "ext": "cjs,js,json",
+  "ignore": ["node_modules/", "uploads/"],
+  "exec": "node api/index.cjs"
+}
