@@ -27,13 +27,13 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
       'deductible': 'Deductible',
       'coinsurance': 'Coinsurance',
       'paidAmt': 'Paid Amt',
-      'eobCd': 'EOB Cd',
-      'remCd': 'Rem Cd',
+      'eobCd': 'Detail EOB',
+      'remCd': 'Detail Description',
       'claimNum': 'Claim Num',
       'icn': 'ICN',
       'dos': 'DOS',
       'procCd': 'Proc Cd',
-      'procDesc': 'Proc Desc',
+      'procDesc': 'Service Description',
       'from': 'From',
       'to': 'To',
       'billAmount': 'Bill Amount',
@@ -44,8 +44,8 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
       'srvcDesc': 'Proc Desc',
       'srvcFrom': 'From',
       'srvcTo': 'To',
-      'srvcDetail': 'Detail',
-      'srvcBilledAmt': 'Billed Amount',
+      'srvcDetail': 'Detail EOB',
+      'srvcBilledAmt': 'Billed Amt',
       'srvcPaidAmt': 'Paid Amount',
       'svDescription': 'Detail Description'
     }
@@ -366,22 +366,23 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
     yPosition += 15
 
     if (data.medicaid.denied.length > 0) {
-      const deniedCols = Object.keys(data.medicaid.denied[0]).slice(0, 8)
-      const deniedHeaders = deniedCols.map(col => {
-        const headerMap: { [key: string]: string } = {
-          'samename': 'Name', 'service': 'Proc Cd', 'modifierCd': 'Modifier',
-          'srvDateFrom': 'From', 'srvDateTo': 'To', 'billedAmt': 'Billed Amt',
-          'remCd': 'Rem Cd', 'claimNum': 'Claim Num'
-        }
-        return headerMap[col] || col
-      })
+      const deniedCols = ['samename', 'srvcCode', 'srvcModifierCd', 'srvcDesc', 'srvcFrom', 'srvcTo', 'srvcBilledAmt', 'srvcDetail', 'svDescription']
+      const deniedHeaders = ['#', 'Name', 'Proc Cd', 'Modifier', 'Service Description', 'From', 'To', 'Billed Amt', 'Detail EOB', 'Detail Description']
 
-      const deniedRows = data.medicaid.denied.map(claim =>
-        deniedCols.map(col => {
-          const value = claim[col]
+      const deniedRows = data.medicaid.denied.map((claim, index) => {
+        const rowData = deniedCols.map(col => {
+          let value = claim[col]
+
+          // Handle array values (like svDescription)
+          if (Array.isArray(value)) {
+            value = value.join(', ')
+          }
+
           return value !== null && value !== undefined ? String(value) : '-'
         })
-      )
+        // Add row number at the beginning
+        return [String(index + 1), ...rowData]
+      })
 
       autoTable(doc, {
         startY: yPosition,
@@ -389,7 +390,10 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
         body: deniedRows,
         theme: 'striped',
         headStyles: { fillColor: [231, 76, 60], fontStyle: 'bold', fontSize: 8 },
-        styles: { fontSize: 7, cellPadding: 4 }
+        styles: { fontSize: 7, cellPadding: 4 },
+        columnStyles: {
+          0: { cellWidth: 25, halign: 'center' }
+        }
       })
 
       yPosition = (doc as any).lastAutoTable.finalY + 20
@@ -636,6 +640,11 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
         return ['samename', 'srvcCode', 'srvcModifierCd', 'srvcDesc', 'srvcFrom', 'srvcTo', 'srvcBilledAmt', 'srvcPaidAmt', 'srvcDetail', 'svDescription']
       }
 
+      // Define specific column order for Medicaid Denied Claims
+      if (title.includes('Medicaid Denied')) {
+        return ['samename', 'srvcCode', 'srvcModifierCd', 'srvcDesc', 'srvcFrom', 'srvcTo', 'srvcBilledAmt', 'srvcDetail', 'svDescription']
+      }
+
       // For Adjustment Summary, filter out memberName and name
       if (title.includes('Adjustment Summary')) {
         const keys = Object.keys(obj)
@@ -663,13 +672,13 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
       'deductible': 'Deductible',
       'coinsurance': 'Coinsurance',
       'paidAmt': 'Paid Amt',
-      'eobCd': 'EOB Cd',
-      'remCd': 'Rem Cd',
+      'eobCd': 'Detail EOB',
+      'remCd': 'Detail Description',
       'claimNum': 'Claim Num',
       'icn': 'ICN',
       'dos': 'DOS',
       'procCd': 'Proc Cd',
-      'procDesc': 'Proc Desc',
+      'procDesc': 'Service Description',
       'from': 'From',
       'to': 'To',
       'billAmount': 'Bill Amount',
@@ -680,8 +689,8 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
       'srvcDesc': 'Proc Desc',
       'srvcFrom': 'From',
       'srvcTo': 'To',
-      'srvcDetail': 'Detail',
-      'srvcBilledAmt': 'Billed Amount',
+      'srvcDetail': 'Detail EOB',
+      'srvcBilledAmt': 'Billed Amt',
       'srvcPaidAmt': 'Paid Amount',
       'svDescription': 'Detail Description'
     }
@@ -691,11 +700,25 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
       if (key.toLowerCase() === 'samename') {
         return 'Name'
       }
+
+      // Special handling for Medicaid Denied Claims
+      if (title.includes('Medicaid Denied')) {
+        if (key === 'srvcDesc') return 'Service Description'
+        if (key === 'srvcBilledAmt') return 'Billed Amt'
+        if (key === 'srvcDetail') return 'Detail EOB'
+      }
+
+      // Special handling for Medicaid Paid Claims
+      if (title.includes('Medicaid Paid')) {
+        if (key === 'srvcBilledAmt') return 'Billed Amount'
+        if (key === 'srvcPaidAmt') return 'Paid Amount'
+      }
+
       return columnHeaderMap[key] || key.replace(/([A-Z])/g, ' $1').trim()
     }
 
-    // Check if this is a paid claims table
-    const isPaidTable = title.includes('Paid Claims')
+    // Check if this table should have row numbers
+    const hasRowNumbers = title.includes('Paid Claims') || title.includes('Medicaid Denied')
 
     return (
       <div className="mb-8">
@@ -713,7 +736,7 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                {isPaidTable && (
+                {hasRowNumbers && (
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     #
                   </th>
@@ -731,7 +754,7 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
             <tbody className="bg-white divide-y divide-gray-200">
               {claims.map((claim, idx) => (
                 <tr key={idx} className="hover:bg-gray-50">
-                  {isPaidTable && (
+                  {hasRowNumbers && (
                     <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                       {idx + 1}
                     </td>
