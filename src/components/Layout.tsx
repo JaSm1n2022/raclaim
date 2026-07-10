@@ -59,19 +59,24 @@ export function Layout({ children }: LayoutProps) {
             />
             <div className="fixed top-0 left-0 h-full w-80 max-w-[85vw] bg-white shadow-2xl z-50 transform transition-transform duration-300">
               <div className="flex flex-col h-full">
-                <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                  <img
-                    src="/images/mybillingra.png"
-                    alt="MyBillingRA Logo"
-                    className="h-16 w-auto"
-                    style={{ mixBlendMode: 'multiply' }}
-                  />
-                  <button
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="p-2 rounded-lg hover:bg-gray-100"
-                  >
-                    <X className="w-5 h-5 text-gray-600" />
-                  </button>
+                <div className="p-6 border-b border-gray-200">
+                  <div className="flex items-center justify-end mb-3">
+                    <button
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="p-2 rounded-lg hover:bg-gray-100"
+                    >
+                      <X className="w-5 h-5 text-gray-600" />
+                    </button>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <img
+                      src="/images/mybillingra.png"
+                      alt="MyBillingRA Logo"
+                      className="h-20 w-auto mb-2"
+                      style={{ mixBlendMode: 'multiply' }}
+                    />
+                    <p className="text-sm text-gray-600 font-bold">Billing Portal</p>
+                  </div>
                 </div>
 
                 <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-b border-gray-200">
@@ -127,13 +132,14 @@ export function Layout({ children }: LayoutProps) {
       {/* Desktop Sidebar */}
       <aside className="hidden lg:block fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200">
         <div className="flex flex-col h-full">
-          <div className="p-6 border-b border-gray-200">
+          <div className="p-6 border-b border-gray-200 flex flex-col items-center">
             <img
               src="/images/mybillingra.png"
               alt="MyBillingRA Logo"
-              className="h-12 w-auto mb-2"
+              className="h-20 w-auto mb-2"
+              style={{ mixBlendMode: 'multiply' }}
             />
-            <p className="text-sm text-gray-600 mt-1">Billing Portal</p>
+            <p className="text-sm text-gray-600 font-bold">Billing Portal</p>
           </div>
 
           <div className="p-4 border-b border-gray-200">
