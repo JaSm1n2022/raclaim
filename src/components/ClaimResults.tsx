@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { ParsedClaimData, ClaimItem } from '../types'
+import { generateRAReportPDF } from '../lib/raReportPdf'
 
 interface ClaimResultsProps {
   data: ParsedClaimData
@@ -145,7 +146,14 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
     XLSX.writeFile(wb, 'RA_Claim_Complete.xlsx')
   }
 
+  // NEW: Professional styled PDF report matching Biller Report design
   const generatePDFReport = () => {
+    const doc = generateRAReportPDF(data)
+    doc.save('RA_Claim_Report.pdf')
+  }
+
+  // OLD: Original PDF generation (preserved for reference)
+  const generatePDFReportOld = () => {
     const doc = new jsPDF('landscape', 'pt', 'a4')
     const pageWidth = doc.internal.pageSize.getWidth()
     let yPosition = 40
@@ -626,8 +634,8 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
       )
     }
 
-    // Save the PDF
-    doc.save('RA_Claim_Report.pdf')
+    // Save the PDF (old version)
+    doc.save('RA_Claim_Report_Old.pdf')
   }
 
   const renderTable = (claims: any[], title: string) => {

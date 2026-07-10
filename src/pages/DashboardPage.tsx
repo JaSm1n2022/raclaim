@@ -76,7 +76,7 @@ export function DashboardPage() {
             Welcome to MyBillingRA
           </h2>
           <p className="text-gray-600">
-            Select a tool below to get started with your billing tasks
+            A personal billing dashboard designed to simplify Remittance Advice submissions, payment tracking, and record management.
           </p>
         </div>
 
@@ -110,7 +110,7 @@ export function DashboardPage() {
             <div>
               <h4 className="font-semibold text-gray-900 mb-2">RA Report</h4>
               <p className="text-sm">
-                Quickly convert your Remittance Advice (RA) claim PDFs into organized Excel spreadsheets for easier analysis and record-keeping.
+                Quickly convert Remittance Advice (RA) claim PDFs into organized Excel spreadsheets for easier analysis and record-keeping. A print-ready, branded PDF report is also generated for documentation and printing.
               </p>
             </div>
             <div>
