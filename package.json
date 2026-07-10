@@ -24,6 +24,7 @@
     "koa": "^2.15.0",
     "koa-body": "^6.0.1",
     "lucide-react": "^0.344.0",
+    "parse-multipart-data": "^1.5.0",
     "pdf-parse": "^1.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
