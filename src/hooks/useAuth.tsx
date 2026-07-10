@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import toast from 'react-hot-toast'
+import { supabase } from '../lib/supabase'
 
 interface User {
   id: string
@@ -10,7 +11,7 @@ interface User {
 interface AuthContextType {
   user: User | null
   loading: boolean
-  signIn: (email: string) => Promise<void>
+  signInWithEmail: (email: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -21,39 +22,129 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('raclaim_user')
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser))
-      } catch (e) {
-        localStorage.removeItem('raclaim_user')
-      }
+    console.log('🔐 Initializing auth...')
+    console.log('📍 Current URL:', window.location.href)
+
+    let safetyTimeout: NodeJS.Timeout
+    let isMounted = true
+
+    // Check if this is a magic link callback
+    const hashParams = new URLSearchParams(window.location.hash.substring(1))
+    const hasAuthTokens = hashParams.has('access_token') || hashParams.has('refresh_token')
+
+    if (hasAuthTokens) {
+      console.log('🔗 Magic link detected - will be processed by onAuthStateChange')
     }
-    setLoading(false)
+
+    // Listen for auth changes
+    console.log('👂 Setting up auth listener...')
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return
+
+      console.log('🔄 Auth state changed:', event, {
+        session: !!session,
+        user: session?.user?.email
+      })
+
+      // On page refresh, SIGNED_IN fires first but session isn't ready yet
+      // Wait for INITIAL_SESSION which fires when session is fully loaded
+      // Only exception: if this is a magic link (hasAuthTokens), process SIGNED_IN
+      if (event === 'SIGNED_IN' && !hasAuthTokens) {
+        console.log('⏭️ Skipping early SIGNED_IN - waiting for INITIAL_SESSION')
+        return
+      }
+
+      if (session?.user) {
+        console.log('👤 User session established:', session.user.email)
+        setUser({
+          id: session.user.id,
+          email: session.user.email!,
+          name: session.user.user_metadata?.name || session.user.email?.split('@')[0]
+        })
+
+        console.log('✅ Auth complete')
+        if (safetyTimeout) clearTimeout(safetyTimeout)
+        setLoading(false)
+      } else {
+        console.log('👋 No session - user logged out')
+        setUser(null)
+        if (safetyTimeout) clearTimeout(safetyTimeout)
+        setLoading(false)
+      }
+
+      if (event === 'SIGNED_IN') {
+        console.log('✅ User signed in successfully')
+        // Clean up URL hash after successful sign in
+        if (window.location.hash) {
+          console.log('🧹 Cleaning up URL hash')
+          window.history.replaceState(null, '', window.location.pathname)
+        }
+      }
+    })
+
+    console.log('✅ Auth listener set up')
+
+    // If this is a magic link, wait for onAuthStateChange to handle it
+    // Otherwise, manually trigger session check to ensure onAuthStateChange fires
+    if (!hasAuthTokens) {
+      console.log('🔍 No magic link - triggering session check...')
+      // Call getSession() to ensure onAuthStateChange fires with INITIAL_SESSION
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        console.log('📦 Manual session check result:', !!session, session?.user?.email)
+        // Don't set state here - let onAuthStateChange handle it
+      }).catch(err => {
+        console.error('❌ Error in manual session check:', err)
+      })
+    } else {
+      console.log('⏳ Waiting for magic link to be processed by onAuthStateChange...')
+    }
+
+    // Set a safety timeout
+    safetyTimeout = setTimeout(() => {
+      console.warn('⚠️ Auth timeout after 10 seconds')
+      setLoading(false)
+    }, 10000)
+
+    return () => {
+      console.log('🧹 Cleaning up auth subscription')
+      isMounted = false
+      if (safetyTimeout) clearTimeout(safetyTimeout)
+      subscription.unsubscribe()
+    }
   }, [])
 
-  const signIn = async (email: string) => {
+  const signInWithEmail = async (email: string) => {
     try {
-      const user: User = {
-        id: Date.now().toString(),
-        email,
-        name: email.split('@')[0]
-      }
+      const redirectUrl = `${window.location.origin}/`
+      console.log('📧 Sending magic link to:', email)
+      console.log('🔗 Redirect URL:', redirectUrl)
 
-      setUser(user)
-      localStorage.setItem('raclaim_user', JSON.stringify(user))
-      toast.success('Signed in successfully')
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: redirectUrl,
+          shouldCreateUser: true,
+        },
+      })
+
+      if (error) throw error
+
+      toast.success('Check your email for the magic link!')
     } catch (error: any) {
-      console.error('Error signing in:', error)
-      toast.error(error.message || 'Failed to sign in')
+      console.error('❌ Error signing in:', error)
+      toast.error(error.message || 'Failed to send magic link')
       throw error
     }
   }
 
   const signOut = async () => {
     try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+
       setUser(null)
-      localStorage.removeItem('raclaim_user')
       toast.success('Signed out successfully')
     } catch (error: any) {
       console.error('Error signing out:', error)
@@ -65,7 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = {
     user,
     loading,
-    signIn,
+    signInWithEmail,
     signOut,
   }
 
