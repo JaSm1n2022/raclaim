@@ -1,42 +1,96 @@
 const pdfParse = require('pdf-parse');
 const parser = require('../../api/utils/helperImsParser.cjs');
-const multipart = require('parse-multipart-data');
 
 exports.handler = async function(event, context) {
   // Only allow POST requests
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       body: JSON.stringify({ error: 'Method not allowed' })
     };
   }
 
   try {
-    // Parse the multipart form data
-    const boundary = multipart.getBoundary(event.headers['content-type']);
-    const parts = multipart.parse(Buffer.from(event.body, 'base64'), boundary);
+    // Get content type
+    const contentType = event.headers['content-type'] || event.headers['Content-Type'];
 
-    // Find the file part
-    const filePart = parts.find(part => part.name === 'file');
-
-    if (!filePart) {
+    if (!contentType || !contentType.includes('multipart/form-data')) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: 'No file uploaded' })
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Content-Type must be multipart/form-data' })
       };
     }
 
-    const originalFilename = filePart.filename || 'Unknown';
-    const dataBuffer = filePart.data;
+    // Extract boundary from content-type header
+    const boundaryMatch = contentType.match(/boundary=([^;]+)/);
+    if (!boundaryMatch) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'No boundary found in Content-Type' })
+      };
+    }
+
+    const boundary = boundaryMatch[1];
+
+    // Parse the body - it comes as base64 when binary
+    const bodyBuffer = Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf8');
+
+    // Simple multipart parser for single file upload
+    const parts = bodyBuffer.toString('binary').split('--' + boundary);
+
+    let fileBuffer = null;
+    let originalFilename = 'Unknown';
+
+    // Find the file part
+    for (const part of parts) {
+      if (part.includes('Content-Type: application/pdf') || part.includes('filename=')) {
+        // Extract filename
+        const filenameMatch = part.match(/filename="([^"]+)"/);
+        if (filenameMatch) {
+          originalFilename = filenameMatch[1];
+        }
+
+        // Extract file data - everything after the double CRLF
+        const dataStart = part.indexOf('\r\n\r\n');
+        if (dataStart !== -1) {
+          const dataEnd = part.lastIndexOf('\r\n');
+          const binaryData = part.substring(dataStart + 4, dataEnd > dataStart ? dataEnd : part.length);
+          fileBuffer = Buffer.from(binaryData, 'binary');
+          break;
+        }
+      }
+    }
+
+    if (!fileBuffer) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'No PDF file found in upload' })
+      };
+    }
+
+    console.log('PDF file received:', originalFilename, 'Size:', fileBuffer.length, 'bytes');
 
     // Parse PDF to text
-    const pdfData = await pdfParse(dataBuffer);
+    const pdfData = await pdfParse(fileBuffer);
     const pdfText = pdfData.text;
 
-    console.log('PDF parsed, extracting claim data from:', originalFilename);
-
-    // Convert to JSON string (as expected by the parser functions)
-    const data = JSON.stringify(pdfData);
+    console.log('PDF parsed successfully, text length:', pdfText.length);
 
     // Parse claim data
     const medicaidMemberClaimPaidServiceInfo = parser.getMedicaidMemberPaid(pdfText);
@@ -162,6 +216,7 @@ exports.handler = async function(event, context) {
 
   } catch (error) {
     console.error('Error processing PDF:', error);
+    console.error('Error stack:', error.stack);
     return {
       statusCode: 500,
       headers: {
