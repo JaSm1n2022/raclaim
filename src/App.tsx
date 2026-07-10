@@ -1,130 +1,140 @@
-import { useState } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-import { ArrowLeft } from 'lucide-react'
-import ActionPanel from './components/ActionPanel'
-import FileUpload from './components/FileUpload'
-import ClaimResults from './components/ClaimResults'
-import BillerInvoice from './components/BillerInvoice'
-import BillerReport from './components/BillerReport'
-import type { ParsedClaimData } from './types'
+import { AuthProvider, useAuth } from './hooks/useAuth'
+import { LoginPage } from './pages/LoginPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { ProfilePage } from './pages/ProfilePage'
+import { RAReportPage } from './pages/RAReportPage'
+import { BillerInvoicePage } from './pages/BillerInvoicePage'
+import { BillerReportPage } from './pages/BillerReportPage'
+import { Loader2 } from 'lucide-react'
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+        <p className="text-gray-600">Loading...</p>
+      </div>
+    </div>
+  )
+}
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth()
+
+  if (loading) {
+    return <LoadingScreen />
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+
+  return <>{children}</>
+}
+
+function PublicRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth()
+
+  if (loading) {
+    return <LoadingScreen />
+  }
+
+  if (user) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  return <>{children}</>
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          <PublicRoute>
+            <LoginPage />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/ra-report"
+        element={
+          <ProtectedRoute>
+            <RAReportPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/biller-invoice"
+        element={
+          <ProtectedRoute>
+            <BillerInvoicePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/biller-report"
+        element={
+          <ProtectedRoute>
+            <BillerReportPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
+  )
+}
 
 function App() {
-  const [claimData, setClaimData] = useState<ParsedClaimData | null>(null)
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [selectedPanel, setSelectedPanel] = useState<'ra-report' | 'biller-invoice' | 'biller-report' | null>(null)
-
-  const handleBackToHome = () => {
-    setSelectedPanel(null)
-    setClaimData(null)
-  }
-
-  // Show action panel if no panel is selected
-  if (!selectedPanel) {
-    return (
-      <>
-        <Toaster position="top-right" />
-        <ActionPanel onSelectPanel={setSelectedPanel} />
-      </>
-    )
-  }
-
-  // Show RA Report interface
-  if (selectedPanel === 'ra-report') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4 sm:px-6 lg:px-8">
-        <Toaster position="top-right" />
-
-        <div className="max-w-7xl mx-auto">
-          <button
-            onClick={handleBackToHome}
-            className="mb-6 flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            Back to Home
-          </button>
-
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              RA Report
-            </h1>
-            <p className="text-lg text-gray-600">
-              Upload RA Claim PDF and automatically convert to Excel
-            </p>
-          </div>
-
-          <FileUpload
-            onDataParsed={setClaimData}
-            isProcessing={isProcessing}
-            setIsProcessing={setIsProcessing}
-          />
-
-          {claimData && <ClaimResults data={claimData} />}
-        </div>
-      </div>
-    )
-  }
-
-  // Show Biller Invoice interface
-  if (selectedPanel === 'biller-invoice') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 py-12 px-4 sm:px-6 lg:px-8">
-        <Toaster position="top-right" />
-
-        <div className="max-w-7xl mx-auto">
-          <button
-            onClick={handleBackToHome}
-            className="mb-6 flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            Back to Home
-          </button>
-
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              Biller Invoice
-            </h1>
-            <p className="text-lg text-gray-600">
-              Generate professional PDF invoices from remittance Excel workbooks
-            </p>
-          </div>
-
-          <BillerInvoice />
-        </div>
-      </div>
-    )
-  }
-
-  // Show Biller Report interface
-  if (selectedPanel === 'biller-report') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 py-12 px-4 sm:px-6 lg:px-8">
-        <Toaster position="top-right" />
-
-        <div className="max-w-7xl mx-auto">
-          <button
-            onClick={handleBackToHome}
-            className="mb-6 flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            Back to Home
-          </button>
-
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              Biller Report
-            </h1>
-            <p className="text-lg text-gray-600">
-              Generate comprehensive billing reports with paid and pending claims
-            </p>
-          </div>
-
-          <BillerReport />
-        </div>
-      </div>
-    )
-  }
-
-  return null
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <AppRoutes />
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#363636',
+              color: '#fff',
+            },
+            success: {
+              iconTheme: {
+                primary: '#10b981',
+                secondary: '#fff',
+              },
+            },
+            error: {
+              iconTheme: {
+                primary: '#ef4444',
+                secondary: '#fff',
+              },
+            },
+          }}
+        />
+      </AuthProvider>
+    </BrowserRouter>
+  )
 }
 
 export default App
