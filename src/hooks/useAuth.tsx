@@ -6,6 +6,7 @@ interface User {
   id: string
   email: string
   name?: string
+  companyId?: string
 }
 
 interface AuthContextType {
@@ -58,11 +59,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (session?.user) {
         console.log('👤 User session established:', session.user.email)
-        setUser({
-          id: session.user.id,
-          email: session.user.email!,
-          name: session.user.user_metadata?.name || session.user.email?.split('@')[0]
-        })
+        console.log('🔑 User metadata:', session.user.user_metadata)
+        console.log('🏢 User ID:', session.user.id)
+
+        // Fetch user profile to get companyId from profiles table
+        supabase
+          .from('profiles')
+          .select('companyId, name')
+          .eq('user_id', session.user.id)
+          .single()
+          .then(({ data: profileData, error }) => {
+            if (error) {
+              console.warn('⚠️ Could not fetch user profile from profiles table:', error.message)
+              console.log('📋 Using fallback: metadata or user.id')
+            } else {
+              console.log('✅ Fetched user profile:', profileData)
+            }
+
+            setUser({
+              id: session.user.id,
+              email: session.user.email!,
+              name: profileData?.name || session.user.user_metadata?.name || session.user.email?.split('@')[0],
+              companyId: profileData?.companyId || session.user.user_metadata?.companyId || session.user.id
+            })
+          })
+          .catch(err => {
+            console.error('❌ Error fetching user profile:', err)
+            // Fallback to metadata/user.id
+            setUser({
+              id: session.user.id,
+              email: session.user.email!,
+              name: session.user.user_metadata?.name || session.user.email?.split('@')[0],
+              companyId: session.user.user_metadata?.companyId || session.user.id
+            })
+          })
 
         console.log('✅ Auth complete')
         if (safetyTimeout) clearTimeout(safetyTimeout)

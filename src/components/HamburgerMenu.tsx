@@ -9,7 +9,10 @@ import {
   LogOut,
   FileText,
   Receipt,
-  BarChart3
+  BarChart3,
+  ClipboardList,
+  Wrench,
+  Settings
 } from 'lucide-react'
 
 export function HamburgerMenu() {
@@ -180,6 +183,50 @@ export function HamburgerMenu() {
                 >
                   <BarChart3 className="w-5 h-5" />
                   <span className="font-medium">Biller Report</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('/medicaid-claims')}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                    isActive('/medicaid-claims')
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <ClipboardList className="w-5 h-5" />
+                  <span className="font-medium">Medicaid Claims</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('/medicare-claims')}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                    isActive('/medicare-claims')
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <ClipboardList className="w-5 h-5" />
+                  <span className="font-medium">Medicare Claims</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('/utilities')}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                    isActive('/utilities')
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <Wrench className="w-5 h-5" />
+                  <span className="font-medium">Utilities</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('/settings')}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                    isActive('/settings')
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <Settings className="w-5 h-5" />
+                  <span className="font-medium">Settings</span>
                 </button>
               </div>
             </div>

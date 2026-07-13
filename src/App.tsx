@@ -7,6 +7,10 @@ import { ProfilePage } from './pages/ProfilePage'
 import { RAReportPage } from './pages/RAReportPage'
 import { BillerInvoicePage } from './pages/BillerInvoicePage'
 import { BillerReportPage } from './pages/BillerReportPage'
+import { MedicaidClaimsPage } from './pages/MedicaidClaimsPage'
+import { MedicareClaimsPage } from './pages/MedicareClaimsPage'
+import { UtilitiesPage } from './pages/UtilitiesPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { Loader2 } from 'lucide-react'
 
 function LoadingScreen() {
@@ -96,6 +100,38 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <BillerReportPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/medicaid-claims"
+        element={
+          <ProtectedRoute>
+            <MedicaidClaimsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/medicare-claims"
+        element={
+          <ProtectedRoute>
+            <MedicareClaimsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/utilities"
+        element={
+          <ProtectedRoute>
+            <UtilitiesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <SettingsPage />
           </ProtectedRoute>
         }
       />

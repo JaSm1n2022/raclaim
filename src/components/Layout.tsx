@@ -1,7 +1,7 @@
 import { ReactNode, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Menu, LogOut, User, FileText, Receipt, BarChart3, X } from 'lucide-react'
+import { Menu, LogOut, User, FileText, Receipt, BarChart3, X, ClipboardList, Wrench, Settings } from 'lucide-react'
 
 interface LayoutProps {
   children: ReactNode
@@ -17,6 +17,10 @@ export function Layout({ children }: LayoutProps) {
     { path: '/dashboard', icon: FileText, label: 'RA Report' },
     { path: '/biller-invoice', icon: Receipt, label: 'Biller Invoice' },
     { path: '/biller-report', icon: BarChart3, label: 'Biller Report' },
+    { path: '/medicaid-claims', icon: ClipboardList, label: 'Medicaid Claims' },
+    { path: '/medicare-claims', icon: ClipboardList, label: 'Medicare Claims' },
+    { path: '/utilities', icon: Wrench, label: 'Utilities' },
+    { path: '/settings', icon: Settings, label: 'Settings' },
   ]
 
   const isActive = (path: string) => location.pathname === path
