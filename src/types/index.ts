@@ -1,5 +1,6 @@
 export interface ClaimItem {
   memberName?: string
+  samename?: string
   service?: string
   modifierCd?: string
   srvDateFrom?: string
@@ -15,6 +16,22 @@ export interface ClaimItem {
   icn?: string
   dos?: string
   procDesc?: string
+  srvcCode?: string
+  srvcDesc?: string
+  srvcFrom?: string
+  srvcTo?: string
+  srvcBilledAmt?: number | string
+  srvcPaidAmt?: number | string
+  srvcModifierCd?: string
+  srvcDetail?: string
+  svDescription?: string | string[]
+  procCd?: string
+  from?: string
+  to?: string
+  billAmount?: number | string
+  paidAmount?: number | string
+  detail?: string
+  detailDescription?: string
 }
 
 export interface AdjustmentItem {
