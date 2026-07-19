@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { HamburgerMenu } from '../components/HamburgerMenu'
-import { FileText, Receipt, BarChart3 } from 'lucide-react'
+import { FileText, Receipt, BarChart3, Stethoscope, Heart, Settings } from 'lucide-react'
 
 export function DashboardPage() {
   const navigate = useNavigate()
@@ -34,6 +34,33 @@ export function DashboardPage() {
       color: 'bg-green-50 text-green-600',
       iconBg: 'bg-green-100',
       gradient: 'from-green-50 to-emerald-100'
+    },
+    {
+      title: 'Medicaid Claims',
+      description: 'Manage and track Medicaid claims, payments, and remittance data',
+      icon: Stethoscope,
+      href: '/medicaid-claims',
+      color: 'bg-cyan-50 text-cyan-600',
+      iconBg: 'bg-cyan-100',
+      gradient: 'from-cyan-50 to-blue-100'
+    },
+    {
+      title: 'Medicare Claims',
+      description: 'View and manage Medicare claims and crossover payments',
+      icon: Heart,
+      href: '/medicare-claims',
+      color: 'bg-rose-50 text-rose-600',
+      iconBg: 'bg-rose-100',
+      gradient: 'from-rose-50 to-red-100'
+    },
+    {
+      title: 'Utilities',
+      description: 'Access additional tools and utilities for billing management',
+      icon: Settings,
+      href: '/utilities',
+      color: 'bg-amber-50 text-amber-600',
+      iconBg: 'bg-amber-100',
+      gradient: 'from-amber-50 to-orange-100'
     }
   ]
 
@@ -106,7 +133,7 @@ export function DashboardPage() {
         {/* Info Section */}
         <div className="mt-12 bg-white rounded-xl shadow-md p-8 border border-gray-200">
           <h3 className="text-xl font-bold text-gray-900 mb-4">About MyBillingRA</h3>
-          <div className="grid md:grid-cols-3 gap-6 text-gray-600">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 text-gray-600">
             <div>
               <h4 className="font-semibold text-gray-900 mb-2">RA Report</h4>
               <p className="text-sm">
@@ -123,6 +150,24 @@ export function DashboardPage() {
               <h4 className="font-semibold text-gray-900 mb-2">Biller Report</h4>
               <p className="text-sm">
                 Generate comprehensive billing reports that track both paid and pending claims for complete financial oversight.
+              </p>
+            </div>
+            <div>
+              <h4 className="font-semibold text-gray-900 mb-2">Medicaid Claims</h4>
+              <p className="text-sm">
+                Manage your Medicaid claims database with powerful search, filtering, and reporting capabilities for streamlined claim tracking.
+              </p>
+            </div>
+            <div>
+              <h4 className="font-semibold text-gray-900 mb-2">Medicare Claims</h4>
+              <p className="text-sm">
+                Track Medicare and crossover claims with detailed payment information and historical records.
+              </p>
+            </div>
+            <div>
+              <h4 className="font-semibold text-gray-900 mb-2">Utilities</h4>
+              <p className="text-sm">
+                Access helpful tools and utilities to enhance your billing workflow and data management.
               </p>
             </div>
           </div>
