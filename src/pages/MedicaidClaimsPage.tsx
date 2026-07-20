@@ -168,6 +168,108 @@ export function MedicaidClaimsPage() {
     console.log('Exporting claims:', Array.from(selectedClaims))
   }
 
+  const handleUpdateEFT = async () => {
+    if (selectedClaims.size === 0) {
+      toast.error('Please select claims to update')
+      return
+    }
+
+    const claimsToUpdate = claims.filter(c => selectedClaims.has(c.id))
+
+    if (!user?.companyId) {
+      toast.error('User company ID not found')
+      return
+    }
+
+    setLoading(true)
+    let updatedCount = 0
+    let notFoundCount = 0
+
+    try {
+      for (const claim of claimsToUpdate) {
+        console.log(`[UpdateEFT] Processing claim ${claim.id}:`)
+        console.log(`  - client_code: "${claim.client_code}"`)
+        console.log(`  - service_code: "${claim.service_code}"`)
+        console.log(`  - date_of_service: "${claim.date_of_service}"`)
+
+        // Search for matching EFT record using 3 criteria:
+        // 1. client_code
+        // 2. service_cd
+        // 3. dos (date of service)
+        const { data: eftData, error: eftError } = await supabase
+          .from('efts')
+          .select('*')
+          .eq('companyId', user.companyId)
+          .eq('client_code', claim.client_code)
+          .eq('service_cd', claim.service_code)
+          .eq('dos', claim.date_of_service)
+          .limit(1)
+
+        if (eftError) {
+          console.error(`[UpdateEFT] Error finding EFT for claim ${claim.id}:`, eftError)
+          continue
+        }
+
+        if (!eftData || eftData.length === 0) {
+          console.log(`[UpdateEFT] No EFT match found for claim ${claim.id}`)
+          notFoundCount++
+          continue
+        }
+
+        const eft = eftData[0]
+        console.log(`[UpdateEFT] EFT match found for claim ${claim.id}:`, eft)
+
+        // Update claim with EFT data
+        const { error: updateError } = await supabase
+          .from('claims')
+          .update({
+            paid_amt: eft.paid_amt,
+            billed_amt: eft.billed_amt,
+            eft: eft.eft_number,
+            paid_on: eft.paid_on,
+            paid_issued: eft.paid_issued,
+            status: 'Paid'
+          })
+          .eq('id', claim.id)
+
+        if (updateError) {
+          console.error(`[UpdateEFT] Error updating claim ${claim.id}:`, updateError)
+          continue
+        }
+
+        console.log(`[UpdateEFT] Successfully updated claim ${claim.id}`)
+        updatedCount++
+      }
+
+      // Show results
+      if (updatedCount > 0) {
+        toast.success(`Updated ${updatedCount} claim(s) with EFT data`)
+      }
+
+      if (notFoundCount > 0) {
+        toast(`${notFoundCount} claim(s) had no matching EFT records`, {
+          icon: '⚠️',
+          duration: 4000,
+        })
+      }
+
+      if (updatedCount === 0 && notFoundCount === 0) {
+        toast.error('Failed to update any claims')
+      }
+
+      // Refresh claims list
+      fetchClaims()
+
+      // Clear selection
+      setSelectedClaims(new Set())
+    } catch (error: any) {
+      console.error('[UpdateEFT] Update error:', error)
+      toast.error('Failed to update claims: ' + error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Parse date from MM/DD/YYYY to YYYY-MM-DD
   const parseDate = (dateStr: string): string | null => {
     if (!dateStr) return null
@@ -852,13 +954,23 @@ export function MedicaidClaimsPage() {
               <CheckSquare className="w-5 h-5" />
               <span className="font-medium">{selectedClaims.size} claim(s) selected</span>
             </div>
-            <button
-              onClick={handleExport}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Export Selected
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleUpdateEFT}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                <CheckSquare className="w-4 h-4" />
+                {loading ? 'Updating...' : 'Update EFT'}
+              </button>
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Export Selected
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -880,6 +992,7 @@ export function MedicaidClaimsPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Billed On</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Paid On</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Paid Issued</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">EFT</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Provider</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Client</th>
@@ -894,7 +1007,7 @@ export function MedicaidClaimsPage() {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={13} className="px-4 py-12 text-center">
+                  <td colSpan={14} className="px-4 py-12 text-center">
                     <div className="flex items-center justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                       <span className="ml-3 text-gray-600">Loading claims...</span>
@@ -903,7 +1016,7 @@ export function MedicaidClaimsPage() {
                 </tr>
               ) : claims.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-4 py-12 text-center">
+                  <td colSpan={14} className="px-4 py-12 text-center">
                     <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                     <p className="text-gray-500 font-medium">No claims found</p>
                     <p className="text-gray-400 text-sm mt-1">Upload or add claims to get started</p>
@@ -937,9 +1050,10 @@ export function MedicaidClaimsPage() {
                         </button>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{new Date(claim.billed_on).toLocaleDateString()}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{new Date(claim.paid_on).toLocaleDateString()}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{claim.eft}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{claim.billed_on ? new Date(claim.billed_on).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{claim.paid_on ? new Date(claim.paid_on).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{claim.paid_issued ? new Date(claim.paid_issued).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{claim.eft || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{claim.provider}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{claim.client_name}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{new Date(claim.date_of_service).toLocaleDateString()}</td>
