@@ -2,14 +2,15 @@ import { useCallback, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Upload, FileSpreadsheet, Loader2, FileText } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { parseRemittanceWorkbook, generateRemittancePDF } from '../lib/remittancePdf'
+import { parseRemittanceWorkbook, generateRemittancePDF, generateCommissionPDF } from '../lib/remittancePdf'
 
 export default function BillerInvoice() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [invoiceType, setInvoiceType] = useState<'detailed' | 'commission'>('detailed')
   const [period, setPeriod] = useState('')
-  const [preparedFor, setPreparedFor] = useState('')
-  const [payer, setPayer] = useState('Nevada Medicaid')
+  const [preparedFor, setPreparedFor] = useState('Jasmin Angela Velasco')
+  const [payer, setPayer] = useState('Best Choice Health Partners')
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
@@ -61,13 +62,41 @@ export default function BillerInvoice() {
         return
       }
 
-      const doc = generateRemittancePDF(batches, {
-        period: period.trim(),
-        preparedFor: preparedFor.trim(),
-        payer: payer.trim() || 'Nevada Medicaid',
-      })
+      let doc
+      let fileName
 
-      doc.save('Remittance_Detail_Invoice.pdf')
+      if (invoiceType === 'detailed') {
+        // Generate detailed invoice
+        doc = generateRemittancePDF(batches, {
+          period: period.trim(),
+          preparedFor: preparedFor.trim(),
+          payer: payer.trim() || 'Nevada Medicaid',
+        })
+        fileName = 'Remittance_Detail_Invoice.pdf'
+      } else {
+        // Generate commission invoice
+        // Create invoice number from today's date: JAV-YYYY-MMDD
+        const today = new Date()
+        const year = today.getFullYear()
+        const month = String(today.getMonth() + 1).padStart(2, '0')
+        const day = String(today.getDate()).padStart(2, '0')
+        const invoiceNo = `JAV-${year}-${month}${day}`
+
+        // Format invoice date as MM/DD/YYYY
+        const invoiceDate = `${month}/${day}/${year}`
+
+        doc = generateCommissionPDF(batches, {
+          period: period.trim(),
+          preparedFor: preparedFor.trim(),
+          payer: payer.trim() || 'Nevada Medicaid',
+          invoiceDate,
+          invoiceNo,
+          commissionRate: 0.05, // 5% default
+        })
+        fileName = 'Commission_Invoice.pdf'
+      }
+
+      doc.save(fileName)
       toast.success('PDF invoice generated successfully!')
     } catch (error: any) {
       console.error('PDF generation error:', error)
@@ -120,6 +149,53 @@ export default function BillerInvoice() {
         </div>
       </div>
 
+      {/* Invoice Type Selection */}
+      {selectedFile && (
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Invoice Type</h3>
+
+          <div className="space-y-3">
+            <label className="flex items-start cursor-pointer group">
+              <input
+                type="radio"
+                name="invoiceType"
+                value="detailed"
+                checked={invoiceType === 'detailed'}
+                onChange={() => setInvoiceType('detailed')}
+                className="mt-1 h-4 w-4 text-purple-600 focus:ring-purple-500"
+              />
+              <div className="ml-3">
+                <span className="text-sm font-medium text-gray-900 group-hover:text-purple-600">
+                  Detailed Invoice
+                </span>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Complete line-item breakdown with all claim details, providers, and service information
+                </p>
+              </div>
+            </label>
+
+            <label className="flex items-start cursor-pointer group">
+              <input
+                type="radio"
+                name="invoiceType"
+                value="commission"
+                checked={invoiceType === 'commission'}
+                onChange={() => setInvoiceType('commission')}
+                className="mt-1 h-4 w-4 text-purple-600 focus:ring-purple-500"
+              />
+              <div className="ml-3">
+                <span className="text-sm font-medium text-gray-900 group-hover:text-purple-600">
+                  Commission Invoice
+                </span>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Summary invoice with commission calculation and EFT payment overview
+                </p>
+              </div>
+            </label>
+          </div>
+        </div>
+      )}
+
       {/* Configuration Form */}
       {selectedFile && (
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
@@ -149,7 +225,7 @@ export default function BillerInvoice() {
                 id="preparedFor"
                 value={preparedFor}
                 onChange={(e) => setPreparedFor(e.target.value)}
-                placeholder="e.g., Jasmin"
+                placeholder="e.g., Jasmin Angela Velasco"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
               />
             </div>
@@ -163,7 +239,7 @@ export default function BillerInvoice() {
                 id="payer"
                 value={payer}
                 onChange={(e) => setPayer(e.target.value)}
-                placeholder="e.g., Nevada Medicaid"
+                placeholder="e.g., Best Choice Health Partners"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
               />
             </div>
@@ -177,9 +253,10 @@ export default function BillerInvoice() {
           <button
             onClick={() => {
               setSelectedFile(null)
+              setInvoiceType('detailed')
               setPeriod('')
-              setPreparedFor('')
-              setPayer('Nevada Medicaid')
+              setPreparedFor('Jasmin Angela Velasco')
+              setPayer('Best Choice Health Partners')
             }}
             className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
             disabled={isProcessing}

@@ -83,6 +83,30 @@ export function MedicaidClaimsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [claimToDelete, setClaimToDelete] = useState<number | null>(null)
 
+  // Add/Edit claim modal state
+  const [showClaimModal, setShowClaimModal] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [editingClaimId, setEditingClaimId] = useState<number | null>(null)
+  const [claimForm, setClaimForm] = useState({
+    client_code: '',
+    service_code: '',
+    date_of_service: '',
+    dos_start: '',
+    dos_end: '',
+    unit: 0,
+    billed_amt: 0,
+    paid_amt: 0,
+    eft: '',
+    paid_on: '',
+    paid_issued: '',
+    service_location: '',
+    primary_dx_cd: '',
+    employee: '',
+    comments: '',
+    status: 'Pending'
+  })
+  const [isSavingClaim, setIsSavingClaim] = useState(false)
+
   // Patient cache
   const [patientsCache, setPatientsCache] = useState<Array<{ id: number, patientCd: string, name: string }>>([])
   const [isLoadingPatients, setIsLoadingPatients] = useState(false)
@@ -793,8 +817,196 @@ export function MedicaidClaimsPage() {
   }
 
   const handleAddClaim = () => {
-    // TODO: Open modal form
-    console.log('Add new claim')
+    // Load patients and services if not already loaded
+    if (patientsCache.length === 0) {
+      fetchPatients()
+    }
+    if (servicesCache.length === 0) {
+      fetchServices()
+    }
+
+    setIsEditMode(false)
+    setEditingClaimId(null)
+    setClaimForm({
+      client_code: '',
+      service_code: '',
+      date_of_service: today.toISOString().split('T')[0],
+      dos_start: '',
+      dos_end: '',
+      unit: 0,
+      billed_amt: 0,
+      paid_amt: 0,
+      eft: '',
+      paid_on: '',
+      paid_issued: '',
+      service_location: '',
+      primary_dx_cd: '',
+      employee: user?.name || user?.email || '',
+      comments: '',
+      status: 'Pending'
+    })
+    setShowClaimModal(true)
+  }
+
+  const handleEditClaim = (claim: Claim) => {
+    setIsEditMode(true)
+    setEditingClaimId(claim.id)
+    setClaimForm({
+      client_code: claim.client_code || '',
+      service_code: claim.service_code || '',
+      date_of_service: claim.date_of_service || '',
+      dos_start: claim.dos_start || '',
+      dos_end: claim.dos_end || '',
+      unit: claim.unit || 0,
+      billed_amt: claim.billed_amt || 0,
+      paid_amt: claim.paid_amt || 0,
+      eft: claim.eft || '',
+      paid_on: claim.paid_on || '',
+      paid_issued: claim.paid_issued || '',
+      service_location: claim.service_location || '',
+      primary_dx_cd: claim.primary_dx_cd || '',
+      employee: claim.employee || '',
+      comments: claim.comments || '',
+      status: claim.status || 'Pending'
+    })
+    setShowClaimModal(true)
+  }
+
+  const handleClaimFormChange = (field: string, value: any) => {
+    const updatedForm = { ...claimForm, [field]: value }
+    setClaimForm(updatedForm)
+
+    // Auto-calculate units and billed_amt when time or service changes
+    if (field === 'dos_start' || field === 'dos_end' || field === 'service_code') {
+      const start = updatedForm.dos_start
+      const end = updatedForm.dos_end
+      const serviceCode = updatedForm.service_code
+
+      console.log('[FormChange] Checking auto-calc:', { start, end, serviceCode })
+
+      if (start && end && serviceCode) {
+        const totalMinutes = calculateTotalMinutes(start, end)
+        console.log('[FormChange] Total minutes:', totalMinutes)
+
+        const { service_id, service_unit, rate, rate_per_min } = lookupServiceFromCache(serviceCode)
+        console.log('[FormChange] Service data:', { service_id, service_unit, rate, rate_per_min })
+
+        let calculatedUnit = 0
+        let billedAmt = 0
+
+        if (rate_per_min > 0) {
+          // rate_per_min is minutes per unit (e.g., 15 means 1 unit = 15 minutes)
+          calculatedUnit = calculateUnits(totalMinutes, rate_per_min)
+          billedAmt = calculatedUnit * rate
+          console.log('[FormChange] With rate_per_min:', { calculatedUnit, billedAmt })
+        } else {
+          // No rate_per_min, unit = 1, billed_amt = rate
+          calculatedUnit = 1
+          billedAmt = rate
+          console.log('[FormChange] No rate_per_min:', { calculatedUnit, billedAmt })
+        }
+
+        setClaimForm(prev => ({
+          ...prev,
+          unit: calculatedUnit,
+          billed_amt: billedAmt
+        }))
+      }
+    }
+  }
+
+  const handleSaveClaim = async () => {
+    if (!user?.companyId) {
+      toast.error('User company ID not found')
+      return
+    }
+
+    // Validation
+    if (!claimForm.client_code) {
+      toast.error('Please select a client')
+      return
+    }
+
+    if (!claimForm.service_code) {
+      toast.error('Please select a service code')
+      return
+    }
+
+    if (!claimForm.date_of_service) {
+      toast.error('Please enter date of service')
+      return
+    }
+
+    setIsSavingClaim(true)
+
+    try {
+      // Get client info from client_code
+      const patient = patientsCache.find(p => p.patientCd === claimForm.client_code)
+      const { service_id } = lookupServiceFromCache(claimForm.service_code)
+
+      const claimData = {
+        companyId: user.companyId,
+        provider: 'Medicaid',
+        client_name: patient?.name || '',
+        client_id: patient?.id || 0,
+        client_code: claimForm.client_code,
+        service_code: claimForm.service_code,
+        service_id: service_id || 0,
+        date_of_service: claimForm.date_of_service,
+        dos_start: claimForm.dos_start,
+        dos_end: claimForm.dos_end,
+        unit: claimForm.unit,
+        billed_amt: claimForm.billed_amt,
+        paid_amt: claimForm.paid_amt || null,
+        eft: claimForm.eft || '',
+        paid_on: claimForm.paid_on || null,
+        paid_issued: claimForm.paid_issued || null,
+        billed_on: claimForm.date_of_service,
+        service_location: claimForm.service_location,
+        primary_dx_cd: claimForm.primary_dx_cd,
+        employee: claimForm.employee,
+        comments: claimForm.comments || null,
+        status: claimForm.status
+      }
+
+      if (isEditMode && editingClaimId) {
+        // Update existing claim
+        const { error } = await supabase
+          .from('claims')
+          .update(claimData)
+          .eq('id', editingClaimId)
+
+        if (error) {
+          console.error('Error updating claim:', error)
+          toast.error('Failed to update claim: ' + error.message)
+          return
+        }
+
+        toast.success('Claim updated successfully')
+      } else {
+        // Insert new claim
+        const { error } = await supabase
+          .from('claims')
+          .insert(claimData)
+
+        if (error) {
+          console.error('Error creating claim:', error)
+          toast.error('Failed to create claim: ' + error.message)
+          return
+        }
+
+        toast.success('Claim created successfully')
+      }
+
+      // Close modal and refresh
+      setShowClaimModal(false)
+      fetchClaims()
+    } catch (error: any) {
+      console.error('Save claim error:', error)
+      toast.error('Failed to save claim: ' + error.message)
+    } finally {
+      setIsSavingClaim(false)
+    }
   }
 
   const handleDeleteClaim = (claimId: number) => {
@@ -1036,6 +1248,7 @@ export function MedicaidClaimsPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <button
+                          onClick={() => handleEditClaim(claim)}
                           className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded transition-colors"
                           title="Edit"
                         >
@@ -1330,6 +1543,276 @@ export function MedicaidClaimsPage() {
               >
                 {isUploading ? 'Saving...' : 'Confirm & Save'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Claim Modal */}
+      {showClaimModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 p-6 z-10">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">
+                  {isEditMode ? 'Edit Claim' : 'Add New Claim'}
+                </h2>
+                <button
+                  onClick={() => setShowClaimModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Client Code */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Client Code <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={claimForm.client_code}
+                    onChange={(e) => handleClaimFormChange('client_code', e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select Client Code</option>
+                    {patientsCache.map(patient => (
+                      <option key={patient.id} value={patient.patientCd}>
+                        {patient.patientCd}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Service Code */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Service Code <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={claimForm.service_code}
+                    onChange={(e) => handleClaimFormChange('service_code', e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select Service Code</option>
+                    {servicesCache.map(service => (
+                      <option key={service.id} value={service.code}>
+                        {service.code}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Date of Service */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Date of Service <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={claimForm.date_of_service}
+                    onChange={(e) => handleClaimFormChange('date_of_service', e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Start Time */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Start Time
+                  </label>
+                  <input
+                    type="time"
+                    value={claimForm.dos_start}
+                    onChange={(e) => handleClaimFormChange('dos_start', e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* End Time */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    End Time
+                  </label>
+                  <input
+                    type="time"
+                    value={claimForm.dos_end}
+                    onChange={(e) => handleClaimFormChange('dos_end', e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Unit (Auto-calculated) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Unit (Auto-calculated)
+                  </label>
+                  <input
+                    type="number"
+                    value={claimForm.unit}
+                    readOnly
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                  />
+                </div>
+
+                {/* Billed Amount (Auto-calculated but editable) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Billed Amount
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={claimForm.billed_amt}
+                    onChange={(e) => handleClaimFormChange('billed_amt', parseFloat(e.target.value) || 0)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Auto-calculated, but can be edited</p>
+                </div>
+
+                {/* Service Location */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Service Location
+                  </label>
+                  <input
+                    type="text"
+                    value={claimForm.service_location}
+                    onChange={(e) => handleClaimFormChange('service_location', e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Employee */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Employee
+                  </label>
+                  <input
+                    type="text"
+                    value={claimForm.employee}
+                    onChange={(e) => handleClaimFormChange('employee', e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Diagnosis Code */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Diagnosis Code (ICD-10)
+                  </label>
+                  <input
+                    type="text"
+                    value={claimForm.primary_dx_cd}
+                    onChange={(e) => handleClaimFormChange('primary_dx_cd', e.target.value)}
+                    placeholder="e.g., F20.9; F41.9"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Paid Amount */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Paid Amount
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={claimForm.paid_amt || ''}
+                    onChange={(e) => handleClaimFormChange('paid_amt', parseFloat(e.target.value) || 0)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* EFT Number */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    EFT Number
+                  </label>
+                  <input
+                    type="text"
+                    value={claimForm.eft}
+                    onChange={(e) => handleClaimFormChange('eft', e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Paid On */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Paid On
+                  </label>
+                  <input
+                    type="date"
+                    value={claimForm.paid_on}
+                    onChange={(e) => handleClaimFormChange('paid_on', e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Paid Issued */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Paid Issued
+                  </label>
+                  <input
+                    type="date"
+                    value={claimForm.paid_issued}
+                    onChange={(e) => handleClaimFormChange('paid_issued', e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Status
+                  </label>
+                  <select
+                    value={claimForm.status}
+                    onChange={(e) => handleClaimFormChange('status', e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="Pending">Pending</option>
+                    <option value="Paid">Paid</option>
+                    <option value="Denied">Denied</option>
+                  </select>
+                </div>
+
+                {/* Comments */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Comments
+                  </label>
+                  <textarea
+                    value={claimForm.comments}
+                    onChange={(e) => handleClaimFormChange('comments', e.target.value)}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-6">
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowClaimModal(false)}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveClaim}
+                  disabled={isSavingClaim}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  {isSavingClaim ? 'Saving...' : isEditMode ? 'Update Claim' : 'Create Claim'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
