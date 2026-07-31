@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 import * as XLSX from 'xlsx'
+import { SERVICE_CODE_MAP } from '../constants/serviceCodes'
 
 interface Claim {
   id: number
@@ -54,12 +55,6 @@ interface ParsedRow {
   blockingIssues: string[]
   softWarnings: string[]
   isDuplicate: boolean
-}
-
-// Service code mapping
-const SERVICE_CODE_MAP: Record<string, string> = {
-  'H2014': 'BST (Skills Training and Development)',
-  'H2017': 'PSR (Psychosocial Rehabilitation)'
 }
 
 export function MedicaidClaimsPage() {
