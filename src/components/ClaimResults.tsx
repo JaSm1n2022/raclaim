@@ -30,6 +30,9 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
     selected: boolean
   }>>([])
   const [showPreview, setShowPreview] = useState(false)
+  const [showServicesMigrationConfirm, setShowServicesMigrationConfirm] = useState(false)
+  const [isServicesMigrating, setIsServicesMigrating] = useState(false)
+  const [servicesMigrated, setServicesMigrated] = useState(false)
   // Parse MMDDYY date format to ISO (YYYY-MM-DD)
   const parseDateMMDDYY = (dateStr: string): string | null => {
     if (!dateStr || dateStr.length !== 6) {
@@ -246,6 +249,71 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
       toast.error(`Migration failed: ${error.message}`)
     } finally {
       setIsMigrating(false)
+    }
+  }
+
+  // Migrate Services Summary to database
+  const handleServicesMigration = async () => {
+    if (!user?.companyId) {
+      toast.error('User company ID not found')
+      return
+    }
+
+    if (data.services.length === 0) {
+      toast.error('No services data to migrate')
+      return
+    }
+
+    setIsServicesMigrating(true)
+
+    try {
+      const currentDate = new Date().toISOString()
+      const eftNumber = data.remittance.remittanceEftNumber || ''
+
+      // Build records for bulk insert
+      const records = data.services.map(service => ({
+        companyId: user.companyId,
+        eft_number: eftNumber,
+        service_code: service.name || null,
+        description: service.desc || null,
+        medicaid_paid: parseFloat(String(service.medicaidPaid || 0)),
+        medicaid_denied: parseFloat(String(service.medicaidDenied || 0)),
+        medicare_paid: parseFloat(String(service.medicarePaid || 0)),
+        medicare_denied: parseFloat(String(service.medicareDenied || 0)),
+        total: parseFloat(String(service.total || 0)),
+        createdUser: {
+          name: user.name || user.email,
+          userId: user.id,
+          date: currentDate
+        },
+        updatedUser: {
+          name: user.name || user.email,
+          userId: user.id,
+          date: currentDate
+        }
+      }))
+
+      // Bulk insert into service_summary table
+      const { data: insertedData, error: insertError } = await supabase
+        .from('service_summary')
+        .insert(records)
+        .select()
+
+      if (insertError) {
+        console.error('Error inserting service summary:', insertError)
+        toast.error(`Failed to migrate: ${insertError.message}`)
+        return
+      }
+
+      // Success!
+      toast.success(`Successfully migrated ${insertedData?.length || records.length} service records`)
+      setServicesMigrated(true)
+      setShowServicesMigrationConfirm(false)
+    } catch (error: any) {
+      console.error('Services migration error:', error)
+      toast.error(`Migration failed: ${error.message}`)
+    } finally {
+      setIsServicesMigrating(false)
     }
   }
 
@@ -1249,13 +1317,23 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-xl font-semibold text-gray-800">Services Summary</h3>
-            <button
-              onClick={() => downloadExcel(data.services, 'Services', 'Services_Summary.xlsx')}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => downloadExcel(data.services, 'Services', 'Services_Summary.xlsx')}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"
+              >
+                <Download className="w-4 h-4" />
+                Export
+              </button>
+              <button
+                onClick={() => setShowServicesMigrationConfirm(true)}
+                disabled={isServicesMigrating || servicesMigrated || data.services.length === 0}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Database className="w-4 h-4" />
+                {servicesMigrated ? 'Migrated' : 'Migration'}
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto bg-white rounded-lg shadow">
             <table className="min-w-full divide-y divide-gray-200">
@@ -1527,6 +1605,65 @@ export default function ClaimResults({ data }: ClaimResultsProps) {
                   )}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Services Migration Confirmation Dialog */}
+      {showServicesMigrationConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-semibold text-gray-900">Confirm Migration</h3>
+              <button
+                onClick={() => setShowServicesMigrationConfirm(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={isServicesMigrating}
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-sm text-gray-600 mb-4">
+                You are about to migrate <span className="font-semibold text-gray-900">{data.services.length} service records</span> to the database.
+              </p>
+              <p className="text-sm text-gray-600 mb-2">
+                EFT Number: <span className="font-semibold text-gray-900">{data.remittance.remittanceEftNumber || 'N/A'}</span>
+              </p>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-4">
+                <p className="text-xs text-yellow-800">
+                  <strong>Warning:</strong> This will create new records. Clicking "Migrate" multiple times will create duplicates.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowServicesMigrationConfirm(false)}
+                disabled={isServicesMigrating}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleServicesMigration}
+                disabled={isServicesMigrating}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isServicesMigrating ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Migrating...
+                  </>
+                ) : (
+                  <>
+                    <Database className="w-4 h-4" />
+                    Migrate
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

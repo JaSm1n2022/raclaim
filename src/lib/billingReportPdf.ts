@@ -175,10 +175,17 @@ export function parseBillingWorkbook(
     const cols = grid[headerIdx].map((c) => str(c));
     const ix = (label: string) => cols.indexOf(label);
     const idx = {
-      provider: ix('Provider Rendering'), client: ix('Client Name'), dos: ix('DOS'),
-      time: ix('Time'), code: ix('Code'), desc: ix('Description'), unit: ix('Unit'),
-      billed: ix('Billed Amount'), paid: ix('Paid Amount'),
-      status: ix('Claim Status'), comments: ix('COMMENTS'),
+      provider: ix('Employee'), // Changed from 'Provider Rendering' to 'Employee'
+      client: ix('Client Name'),
+      dos: ix('DOS'),
+      time: ix('Time'),
+      code: ix('Code'),
+      desc: ix('Description'),
+      unit: ix('Unit'),
+      billed: ix('Billed Amount'),
+      paid: ix('Paid Amount'),
+      status: ix('Claim Status'),
+      comments: ix('COMMENTS'),
     };
     const out: ClaimLine[] = [];
     for (let r = headerIdx + 1; r < endExclusive; r++) {
@@ -187,7 +194,7 @@ export function parseBillingWorkbook(
       const paidRaw = row?.[idx.paid];
       out.push({
         provider: titleCase(str(row?.[idx.provider])),
-        client: str(row?.[idx.client]),
+        client: str(row?.[idx.client]).toUpperCase(),
         dos: asDate(row?.[idx.dos]),
         time: str(row?.[idx.time]),
         code: str(row?.[idx.code]),

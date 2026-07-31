@@ -87,6 +87,7 @@ export function MedicaidClaimsPage() {
   const [showClaimModal, setShowClaimModal] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [editingClaimId, setEditingClaimId] = useState<number | null>(null)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'pending'>('all')
   const [claimForm, setClaimForm] = useState({
     client_code: '',
     service_code: '',
@@ -99,6 +100,7 @@ export function MedicaidClaimsPage() {
     eft: '',
     paid_on: '',
     paid_issued: '',
+    billed_on: '',
     service_location: '',
     primary_dx_cd: '',
     employee: '',
@@ -252,7 +254,8 @@ export function MedicaidClaimsPage() {
             eft: eft.eft_number,
             paid_on: eft.paid_on,
             paid_issued: eft.paid_issued,
-            status: 'Paid'
+            status: 'Paid',
+            comments: eft.comments || null
           })
           .eq('id', claim.id)
 
@@ -839,6 +842,7 @@ export function MedicaidClaimsPage() {
       eft: '',
       paid_on: '',
       paid_issued: '',
+      billed_on: today.toISOString().split('T')[0],
       service_location: '',
       primary_dx_cd: '',
       employee: user?.name || user?.email || '',
@@ -849,25 +853,54 @@ export function MedicaidClaimsPage() {
   }
 
   const handleEditClaim = (claim: Claim) => {
+    // Load patients and services if not already loaded
+    if (patientsCache.length === 0) {
+      fetchPatients()
+    }
+    if (servicesCache.length === 0) {
+      fetchServices()
+    }
+
+    // Normalize status: convert "PAID" to "Paid" for consistency
+    let normalizedStatus = claim.status || 'Pending'
+    if (normalizedStatus.toLowerCase() === 'paid') {
+      normalizedStatus = 'Paid'
+    }
+
+    // Format dates for date inputs (they expect YYYY-MM-DD format)
+    const formatDateForInput = (dateStr: string | null | undefined) => {
+      if (!dateStr) return ''
+      // If it's already in YYYY-MM-DD format, return as is
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr
+      // Otherwise parse and format
+      try {
+        const date = new Date(dateStr)
+        return date.toISOString().split('T')[0]
+      } catch {
+        return ''
+      }
+    }
+
     setIsEditMode(true)
     setEditingClaimId(claim.id)
     setClaimForm({
       client_code: claim.client_code || '',
       service_code: claim.service_code || '',
-      date_of_service: claim.date_of_service || '',
+      date_of_service: formatDateForInput(claim.date_of_service),
       dos_start: claim.dos_start || '',
       dos_end: claim.dos_end || '',
       unit: claim.unit || 0,
       billed_amt: claim.billed_amt || 0,
       paid_amt: claim.paid_amt || 0,
       eft: claim.eft || '',
-      paid_on: claim.paid_on || '',
-      paid_issued: claim.paid_issued || '',
+      paid_on: formatDateForInput(claim.paid_on),
+      paid_issued: formatDateForInput(claim.paid_issued),
+      billed_on: formatDateForInput(claim.billed_on),
       service_location: claim.service_location || '',
       primary_dx_cd: claim.primary_dx_cd || '',
       employee: claim.employee || '',
       comments: claim.comments || '',
-      status: claim.status || 'Pending'
+      status: normalizedStatus
     })
     setShowClaimModal(true)
   }
@@ -937,6 +970,11 @@ export function MedicaidClaimsPage() {
       return
     }
 
+    if (!claimForm.billed_on) {
+      toast.error('Please enter billed on date')
+      return
+    }
+
     setIsSavingClaim(true)
 
     try {
@@ -961,7 +999,7 @@ export function MedicaidClaimsPage() {
         eft: claimForm.eft || '',
         paid_on: claimForm.paid_on || null,
         paid_issued: claimForm.paid_issued || null,
-        billed_on: claimForm.date_of_service,
+        billed_on: claimForm.billed_on || null,
         service_location: claimForm.service_location,
         primary_dx_cd: claimForm.primary_dx_cd,
         employee: claimForm.employee,
@@ -1109,7 +1147,7 @@ export function MedicaidClaimsPage() {
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Search
@@ -1143,6 +1181,20 @@ export function MedicaidClaimsPage() {
               onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Status
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as 'all' | 'paid' | 'pending')}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">All</option>
+              <option value="paid">Paid</option>
+              <option value="pending">Pending</option>
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1196,7 +1248,16 @@ export function MedicaidClaimsPage() {
                 <th className="px-4 py-3 text-left">
                   <input
                     type="checkbox"
-                    checked={selectedClaims.size === claims.length && claims.length > 0}
+                    checked={(() => {
+                      const filteredClaims = claims.filter(claim => {
+                        if (statusFilter === 'all') return true
+                        const statusLower = (claim.status || '').toLowerCase()
+                        if (statusFilter === 'paid') return statusLower === 'paid'
+                        if (statusFilter === 'pending') return statusLower !== 'paid'
+                        return true
+                      })
+                      return selectedClaims.size === filteredClaims.length && filteredClaims.length > 0
+                    })()}
                     onChange={(e) => handleSelectAll(e.target.checked)}
                     className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                   />
@@ -1214,12 +1275,13 @@ export function MedicaidClaimsPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Billed</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Paid</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Comments</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={14} className="px-4 py-12 text-center">
+                  <td colSpan={15} className="px-4 py-12 text-center">
                     <div className="flex items-center justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                       <span className="ml-3 text-gray-600">Loading claims...</span>
@@ -1228,14 +1290,22 @@ export function MedicaidClaimsPage() {
                 </tr>
               ) : claims.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="px-4 py-12 text-center">
+                  <td colSpan={15} className="px-4 py-12 text-center">
                     <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                     <p className="text-gray-500 font-medium">No claims found</p>
                     <p className="text-gray-400 text-sm mt-1">Upload or add claims to get started</p>
                   </td>
                 </tr>
               ) : (
-                claims.map((claim) => (
+                claims
+                  .filter(claim => {
+                    if (statusFilter === 'all') return true
+                    const statusLower = (claim.status || '').toLowerCase()
+                    if (statusFilter === 'paid') return statusLower === 'paid'
+                    if (statusFilter === 'pending') return statusLower !== 'paid'
+                    return true
+                  })
+                  .map((claim) => (
                   <tr key={claim.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <input
@@ -1276,12 +1346,15 @@ export function MedicaidClaimsPage() {
                     <td className="px-4 py-3 text-sm font-medium text-green-600">${(claim.paid_amt ?? 0).toFixed(2)}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                        claim.status === 'Paid' ? 'bg-green-100 text-green-800' :
+                        (claim.status || '').toLowerCase() === 'paid' ? 'bg-green-100 text-green-800' :
                         claim.status === 'Denied' ? 'bg-red-100 text-red-800' :
                         'bg-yellow-100 text-yellow-800'
                       }`}>
-                        {claim.status}
+                        {(claim.status || '').toUpperCase()}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate" title={claim.comments || ''}>
+                      {claim.comments || '—'}
                     </td>
                   </tr>
                 ))
@@ -1615,6 +1688,19 @@ export function MedicaidClaimsPage() {
                     type="date"
                     value={claimForm.date_of_service}
                     onChange={(e) => handleClaimFormChange('date_of_service', e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Billed On */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Billed On <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={claimForm.billed_on}
+                    onChange={(e) => handleClaimFormChange('billed_on', e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
