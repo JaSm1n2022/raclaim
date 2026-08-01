@@ -64,6 +64,37 @@ export function MedicaidClaimsPage() {
   const [searchKeyword, setSearchKeyword] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Format date for display without timezone conversion
+  const formatDateDisplay = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return '—'
+    // If it's in YYYY-MM-DD format, parse it directly
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) {
+      const [, year, month, day] = match
+      return `${month}/${day}/${year}`
+    }
+    // Fallback for other formats
+    try {
+      const date = new Date(dateStr)
+      return date.toLocaleDateString()
+    } catch {
+      return '—'
+    }
+  }
+
+  // Format date for EFT matching (M/D/YYYY format without leading zeros)
+  const formatDateForEFT = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return ''
+    // If it's in YYYY-MM-DD format, convert to M/D/YYYY
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) {
+      const [, year, month, day] = match
+      return `${parseInt(month)}/${parseInt(day)}/${year}`
+    }
+    // Return as-is if already in different format
+    return dateStr
+  }
+
   // Upload modal state
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showReviewModal, setShowReviewModal] = useState(false)
@@ -213,6 +244,10 @@ export function MedicaidClaimsPage() {
         console.log(`  - service_code: "${claim.service_code}"`)
         console.log(`  - date_of_service: "${claim.date_of_service}"`)
 
+        // Convert date to EFT format (M/D/YYYY)
+        const dosFormatted = formatDateForEFT(claim.date_of_service)
+        console.log(`  - dos_formatted: "${dosFormatted}"`)
+
         // Search for matching EFT record using 3 criteria:
         // 1. client_code
         // 2. service_cd
@@ -223,7 +258,7 @@ export function MedicaidClaimsPage() {
           .eq('companyId', user.companyId)
           .eq('client_code', claim.client_code)
           .eq('service_cd', claim.service_code)
-          .eq('dos', claim.date_of_service)
+          .eq('dos', dosFormatted)
           .limit(1)
 
         if (eftError) {
@@ -1264,6 +1299,7 @@ export function MedicaidClaimsPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">EFT</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Provider</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Client</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Discipline</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">DOS</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Code</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Unit</th>
@@ -1276,7 +1312,7 @@ export function MedicaidClaimsPage() {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={15} className="px-4 py-12 text-center">
+                  <td colSpan={16} className="px-4 py-12 text-center">
                     <div className="flex items-center justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                       <span className="ml-3 text-gray-600">Loading claims...</span>
@@ -1285,7 +1321,7 @@ export function MedicaidClaimsPage() {
                 </tr>
               ) : claims.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="px-4 py-12 text-center">
+                  <td colSpan={16} className="px-4 py-12 text-center">
                     <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                     <p className="text-gray-500 font-medium">No claims found</p>
                     <p className="text-gray-400 text-sm mt-1">Upload or add claims to get started</p>
@@ -1328,13 +1364,14 @@ export function MedicaidClaimsPage() {
                         </button>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{claim.billed_on ? new Date(claim.billed_on).toLocaleDateString() : '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{claim.paid_on ? new Date(claim.paid_on).toLocaleDateString() : '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{claim.paid_issued ? new Date(claim.paid_issued).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{formatDateDisplay(claim.billed_on)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{formatDateDisplay(claim.paid_on)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{formatDateDisplay(claim.paid_issued)}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{claim.eft || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{claim.provider}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{claim.client_name}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{new Date(claim.date_of_service).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{claim.employee || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{formatDateDisplay(claim.date_of_service)}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{claim.service_code}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{claim.unit}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">${(claim.billed_amt ?? 0).toFixed(2)}</td>

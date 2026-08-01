@@ -41,6 +41,28 @@ export function UtilitiesPage() {
   const [selectedRecords, setSelectedRecords] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(false)
 
+  // Format date for display without timezone conversion
+  const formatDateDisplay = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return '—'
+    // If it's in YYYY-MM-DD format, parse it directly
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) {
+      const [, year, month, day] = match
+      return `${month}/${day}/${year}`
+    }
+    // If it's in M/D/YYYY or MM/DD/YYYY format, return as-is
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
+      return dateStr
+    }
+    // Fallback for other formats
+    try {
+      const date = new Date(dateStr)
+      return date.toLocaleDateString()
+    } catch {
+      return '—'
+    }
+  }
+
   // Missing Logs state
   const [missingLogs, setMissingLogs] = useState<MissingLogRecord[]>([])
   const [selectedMissingLogs, setSelectedMissingLogs] = useState<Set<number>>(new Set())
@@ -134,8 +156,8 @@ export function UtilitiesPage() {
 
     // Prepare data for Excel
     const excelData = recordsToExport.map(record => ({
-      'Paid On': new Date(record.paid_on).toLocaleDateString(),
-      'Paid Issued': new Date(record.paid_issued).toLocaleDateString(),
+      'Paid On': formatDateDisplay(record.paid_on),
+      'Paid Issued': formatDateDisplay(record.paid_issued),
       'EFT Number': record.eft_number,
       'Provider': record.provider,
       'Client': record.client,
@@ -143,8 +165,8 @@ export function UtilitiesPage() {
       'Service Code': record.service_cd,
       'Service Description': record.service_desc,
       'Service Modifier': record.service_mod || '',
-      'DOS': new Date(record.dos).toLocaleDateString(),
-      'EOS': new Date(record.eos).toLocaleDateString(),
+      'DOS': formatDateDisplay(record.dos),
+      'EOS': formatDateDisplay(record.eos),
       'Billed Amount': record.billed_amt,
       'Paid Amount': record.paid_amt,
       'Status': record.status,
@@ -356,15 +378,15 @@ export function UtilitiesPage() {
 
     // Prepare data for Excel
     const excelData = recordsToExport.map(record => ({
-      'Paid On': new Date(record.paid_on).toLocaleDateString(),
+      'Paid On': formatDateDisplay(record.paid_on),
       'EFT Number': record.eft_number,
       'Provider': record.provider,
       'Client': record.client,
       'Client Code': record.client_code,
       'Service Code': record.service_cd,
       'Service Description': record.service_desc,
-      'DOS': new Date(record.dos).toLocaleDateString(),
-      'EOS': new Date(record.eos).toLocaleDateString(),
+      'DOS': formatDateDisplay(record.dos),
+      'EOS': formatDateDisplay(record.eos),
       'Billed Amount': record.billed_amt,
       'Paid Amount': record.paid_amt,
       'Status': record.status,
@@ -613,12 +635,12 @@ export function UtilitiesPage() {
                                 </button>
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{new Date(record.paid_on).toLocaleDateString()}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{formatDateDisplay(record.paid_on)}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{record.eft_number}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{record.client}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{record.service_cd}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{new Date(record.dos).toLocaleDateString()}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{new Date(record.eos).toLocaleDateString()}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{formatDateDisplay(record.dos)}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{formatDateDisplay(record.eos)}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">${(record.billed_amt ?? 0).toFixed(2)}</td>
                             <td className="px-4 py-3 text-sm font-medium text-green-600">${(record.paid_amt ?? 0).toFixed(2)}</td>
                             <td className="px-4 py-3">
@@ -864,12 +886,12 @@ export function UtilitiesPage() {
                                   className="w-4 h-4 text-yellow-600 rounded focus:ring-2 focus:ring-yellow-500"
                                 />
                               </td>
-                              <td className="px-4 py-3 text-sm text-gray-900">{new Date(record.paid_on).toLocaleDateString()}</td>
+                              <td className="px-4 py-3 text-sm text-gray-900">{formatDateDisplay(record.paid_on)}</td>
                               <td className="px-4 py-3 text-sm text-gray-900">{record.eft_number}</td>
                               <td className="px-4 py-3 text-sm text-gray-900">{record.provider}</td>
                               <td className="px-4 py-3 text-sm text-gray-900">{record.client}</td>
                               <td className="px-4 py-3 text-sm text-gray-900">{record.service_cd}</td>
-                              <td className="px-4 py-3 text-sm text-gray-900">{new Date(record.dos).toLocaleDateString()}</td>
+                              <td className="px-4 py-3 text-sm text-gray-900">{formatDateDisplay(record.dos)}</td>
                               <td className="px-4 py-3 text-sm font-medium text-green-600">${(record.paid_amt ?? 0).toFixed(2)}</td>
                               <td className="px-4 py-3">
                                 <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
