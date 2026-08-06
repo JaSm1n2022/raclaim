@@ -387,13 +387,35 @@ export function MedicaidClaimsPage() {
     }
   }
 
-  // Parse date from MM/DD/YYYY to YYYY-MM-DD
-  const parseDate = (dateStr: string): string | null => {
+  // Parse date from various formats to YYYY-MM-DD
+  const parseDate = (dateStr: any): string | null => {
     if (!dateStr) return null
 
     try {
+      // If it's a Date object
+      if (dateStr instanceof Date) {
+        const year = dateStr.getFullYear()
+        const month = String(dateStr.getMonth() + 1).padStart(2, '0')
+        const day = String(dateStr.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+
+      // If it's an Excel serial number (number type)
+      if (typeof dateStr === 'number') {
+        // Excel serial date (days since 1900-01-01, with 1900-01-01 = 1)
+        const excelEpoch = new Date(1899, 11, 30) // Excel epoch starts Dec 30, 1899
+        const date = new Date(excelEpoch.getTime() + dateStr * 86400000) // 86400000 ms per day
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+
+      // Convert to string for string parsing
+      const dateString = String(dateStr).trim()
+
       // Handle MM/DD/YYYY format
-      const parts = dateStr.split('/')
+      const parts = dateString.split('/')
       if (parts.length === 3) {
         const month = parts[0].padStart(2, '0')
         const day = parts[1].padStart(2, '0')
@@ -402,8 +424,8 @@ export function MedicaidClaimsPage() {
       }
 
       // Already in YYYY-MM-DD format
-      if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        return dateStr
+      if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return dateString
       }
 
       return null
@@ -670,7 +692,7 @@ export function MedicaidClaimsPage() {
         const dos_end = row['END'] || ''
         const duration = parseInt(String(row['DURATION'] || '0'))
         const primary_dx_cd = row['CODE'] || ''
-        const service_code = row['SERVICE'] || ''
+        const service_code = String(row['SERVICE'] || '')
         const service_location = row['LOCATION'] || ''
         const employee = row['EMPLOYEE'] || ''
 
@@ -679,10 +701,22 @@ export function MedicaidClaimsPage() {
           blockingIssues.push('Missing NAME')
         }
 
+        // Debug console for DOS
+        console.log('=== Row', i, '===')
+        console.log('Full row data:', row)
+        console.log('dos_raw value:', dos_raw)
+        console.log('dos_raw type:', typeof dos_raw)
+
         const date_of_service = parseDate(dos_raw)
+        console.log('Parsed date_of_service:', date_of_service)
+
         if (!date_of_service) {
           blockingIssues.push('Invalid or missing DOS')
         }
+
+        // Debug console for service_code error
+        console.log('service_code value:', service_code)
+        console.log('service_code type:', typeof service_code)
 
         if (!service_code.trim()) {
           blockingIssues.push('Missing SERVICE')

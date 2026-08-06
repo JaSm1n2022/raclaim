@@ -120,11 +120,17 @@ export default function BillerReport() {
       })
 
       // Build BillingReport structure
-      const eftNumber = claims[0]?.eft || 'N/A'
+      // Find first claim with valid EFT number (not null/empty)
+      const claimWithEft = claims.find(c => c.eft && c.eft.trim() !== '')
+      const eftNumber = claimWithEft?.eft || 'N/A'
+
+      // Find first paid claim for dates (paid claims have non-null paid_on and paid_issued)
+      const paidClaim = claims.find(c => c.paid_on && c.paid_issued)
+
       const report: BillingReport = {
         eftNumber: eftNumber,
-        remitDate: claims[0]?.paid_on || new Date().toLocaleDateString('en-US'),
-        eftDate: claims[0]?.paid_issue || new Date().toLocaleDateString('en-US'),
+        remitDate: paidClaim?.paid_on || claims[0]?.paid_on || new Date().toLocaleDateString('en-US'),
+        eftDate: paidClaim?.paid_issued || claims[0]?.paid_issued || new Date().toLocaleDateString('en-US'),
         netEarnings: paidClaims.reduce((sum, c) => sum + (c.paid || 0), 0),
         paid: paidClaims,
         notBilled: pendingClaims,
