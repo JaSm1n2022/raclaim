@@ -216,8 +216,68 @@ export function MedicaidClaimsPage() {
   }
 
   const handleExport = () => {
-    // TODO: Implement Excel export
-    console.log('Exporting claims:', Array.from(selectedClaims))
+    if (selectedClaims.size === 0) {
+      toast.error('Please select claims to export')
+      return
+    }
+
+    try {
+      // Get selected claims
+      const claimsToExport = claims.filter(c => selectedClaims.has(c.id))
+
+      // Prepare data for Excel
+      const excelData = claimsToExport.map(claim => ({
+        'Billed On': formatDateDisplay(claim.billed_on),
+        'Paid On': formatDateDisplay(claim.paid_on),
+        'Paid Issued': formatDateDisplay(claim.paid_issued),
+        'EFT': claim.eft || '',
+        'Provider': claim.provider,
+        'Client': claim.client_name,
+        'Client Code': claim.client_code,
+        'Discipline': claim.employee || '',
+        'Date of Service': formatDateDisplay(claim.date_of_service),
+        'DOS Start': claim.dos_start,
+        'DOS End': claim.dos_end,
+        'Service Code': claim.service_code,
+        'Service Description': claim.service_desc,
+        'Location': claim.service_location,
+        'Unit': claim.unit,
+        'Billed Amount': claim.billed_amt ?? 0,
+        'Paid Amount': claim.paid_amt ?? 0,
+        'Status': claim.status || '',
+        'Comments': claim.comments || ''
+      }))
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.json_to_sheet(excelData)
+
+      // Auto-size columns
+      const maxWidth = 50
+      const colWidths = Object.keys(excelData[0] || {}).map(key => {
+        const maxLen = Math.max(
+          key.length,
+          ...excelData.map(row => String(row[key as keyof typeof row]).length)
+        )
+        return { wch: Math.min(maxLen + 2, maxWidth) }
+      })
+      ws['!cols'] = colWidths
+
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, 'Medicaid Claims')
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().split('T')[0]
+      const filename = `medicaid_claims_${timestamp}.xlsx`
+
+      // Write file
+      XLSX.writeFile(wb, filename)
+
+      toast.success(`Exported ${claimsToExport.length} claim(s) to ${filename}`)
+    } catch (error: any) {
+      console.error('Export error:', error)
+      toast.error('Failed to export claims: ' + error.message)
+    }
   }
 
   const handleUpdateEFT = async () => {

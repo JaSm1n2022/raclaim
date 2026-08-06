@@ -189,6 +189,131 @@ export function UtilitiesPage() {
     toast.success(`Exported ${recordsToExport.length} record(s) to Excel`)
   }
 
+  const handleGenerateReport = async () => {
+    if (eftRecords.length === 0) {
+      toast.error('No EFT records to generate report')
+      return
+    }
+
+    if (!user?.companyId) {
+      toast.error('User company ID not found')
+      return
+    }
+
+    setLoading(true)
+    try {
+      // Fetch all claims for the company
+      const { data: claims, error: claimsError } = await supabase
+        .from('claims')
+        .select('*')
+        .eq('companyId', user.companyId)
+
+      if (claimsError) {
+        throw new Error('Failed to fetch claims: ' + claimsError.message)
+      }
+
+      // Match EFT records with claims
+      const reportData = eftRecords.map(eft => {
+        // Find matching claim(s) based on:
+        // 1. efts.client_code = claims.client_code
+        // 2. efts.eft_number = claims.eft
+        // 3. efts.service_cd = claims.service_code
+        // 4. efts.dos = claims.date_of_service
+        const matchingClaims = (claims || []).filter(claim => {
+          // Match on client_code
+          const clientCodeMatch = eft.client_code === claim.client_code
+
+          // Match on EFT number
+          const eftNumberMatch = eft.eft_number === claim.eft
+
+          // Match on service code
+          const serviceCodeMatch = eft.service_cd === claim.service_code
+
+          // Match on DOS (handle different date formats)
+          let dosMatch = false
+          if (eft.dos && claim.date_of_service) {
+            // Convert claim DOS to M/D/YYYY format for comparison
+            const claimDosFormatted = formatDateForEFTComparison(claim.date_of_service)
+            dosMatch = eft.dos === claimDosFormatted || eft.dos === claim.date_of_service
+          }
+
+          return clientCodeMatch && eftNumberMatch && serviceCodeMatch && dosMatch
+        })
+
+        // If multiple matches found, use the first one
+        const matchedClaim = matchingClaims.length > 0 ? matchingClaims[0] : null
+
+        return {
+          'EFT Paid On': formatDateDisplay(eft.paid_on),
+          'EFT Paid Issued': formatDateDisplay(eft.paid_issued),
+          'EFT Number': eft.eft_number,
+          'Provider': eft.provider,
+          'Client': eft.client,
+          'Client Code': eft.client_code,
+          'Service Code': eft.service_cd,
+          'Service Description': eft.service_desc,
+          'Service Modifier': eft.service_mod || '',
+          'DOS': formatDateDisplay(eft.dos),
+          'EOS': formatDateDisplay(eft.eos),
+          'EFT Billed Amount': eft.billed_amt,
+          'EFT Paid Amount': eft.paid_amt,
+          'EFT Status': eft.status,
+          'EFT Comments': eft.comments || '',
+          // Claims data
+          'Claim Paid On': matchedClaim ? formatDateDisplay(matchedClaim.paid_on) : '',
+          'Claim Paid Amount': matchedClaim ? matchedClaim.paid_amt : '',
+          'Claim Employee (Discipline)': matchedClaim ? matchedClaim.employee : '',
+          'Match Status': matchedClaim ? 'Matched' : 'No Match'
+        }
+      })
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.json_to_sheet(reportData)
+
+      // Auto-size columns
+      const maxWidth = 50
+      const colWidths = Object.keys(reportData[0] || {}).map(key => {
+        const maxLen = Math.max(
+          key.length,
+          ...reportData.map(row => String(row[key as keyof typeof row]).length)
+        )
+        return { wch: Math.min(maxLen + 2, maxWidth) }
+      })
+      ws['!cols'] = colWidths
+
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, 'EFT Claims Report')
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().split('T')[0]
+      const filename = `EFT_Claims_Report_${timestamp}.xlsx`
+
+      // Download file
+      XLSX.writeFile(wb, filename)
+
+      const matchedCount = reportData.filter(r => r['Match Status'] === 'Matched').length
+      toast.success(`Report generated: ${matchedCount} of ${eftRecords.length} EFT records matched with claims`)
+    } catch (error: any) {
+      console.error('Generate report error:', error)
+      toast.error('Failed to generate report: ' + error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Helper function to format date for EFT comparison
+  const formatDateForEFTComparison = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return ''
+    // If it's in YYYY-MM-DD format, convert to M/D/YYYY
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) {
+      const [, year, month, day] = match
+      return `${parseInt(month)}/${parseInt(day)}/${year}`
+    }
+    return dateStr
+  }
+
   const handleUpload = () => {
     // TODO: Implement file upload
     toast.info('Upload functionality coming soon')
@@ -546,23 +671,40 @@ export function UtilitiesPage() {
               </div>
 
               {/* Actions Bar */}
-              {selectedRecords.size > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-blue-700">
-                      <CheckSquare className="w-5 h-5" />
-                      <span className="font-medium">{selectedRecords.size} record(s) selected</span>
-                    </div>
-                    <button
-                      onClick={handleExport}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      <Download className="w-4 h-4" />
-                      Export Selected
-                    </button>
+              {/* Actions Bar */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-blue-700">
+                    {selectedRecords.size > 0 && (
+                      <>
+                        <CheckSquare className="w-5 h-5" />
+                        <span className="font-medium">{selectedRecords.size} record(s) selected</span>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {selectedRecords.size > 0 && (
+                      <button
+                        onClick={handleExport}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <Download className="w-4 h-4" />
+                        Export Selected
+                      </button>
+                    )}
+                    {eftRecords.length > 0 && (
+                      <button
+                        onClick={handleGenerateReport}
+                        disabled={loading}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                      >
+                        <FileText className="w-4 h-4" />
+                        {loading ? 'Generating...' : 'Generate Report'}
+                      </button>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* EFT Records Table */}
               <div className="bg-white rounded-lg shadow-sm overflow-hidden">
