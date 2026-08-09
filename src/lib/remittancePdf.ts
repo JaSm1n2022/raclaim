@@ -622,37 +622,12 @@ export function generateCommissionPDF(
     },
   });
 
-  y = finalY(doc) + 12;
+  y = finalY(doc) + 24;
 
   // Calculate table right edge for alignment - using actual table width
   const tableRightEdge = M2.left + tableWidth;  // 46 + 550 = 596pt
 
-  /* ----------------------- Total Amount Due Strip --------------------------- */
-  doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(85, 105, 122);
-  const dueLabel = 'TOTAL AMOUNT DUE';
-  const dueLabelWidth = doc.getTextWidth(dueLabel);
-
-  doc.setFontSize(12);
-  const amountWidth = doc.getTextWidth(money(totalAmt));
-
-  // Position label and amount so the amount aligns with table right edge
-  doc.setFontSize(9);
-  doc.text(dueLabel, tableRightEdge - amountWidth - 20 - dueLabelWidth, y, { charSpace: 1.2 });
-
-  doc.setFontSize(12).setTextColor(...darkNavy);
-  doc.text(money(totalAmt), tableRightEdge, y, { align: 'right' });
-
-  y += 12;
-
   /* ---------------------- Commission Calculation Section -------------------- */
-  // Section title
-  doc.setFillColor(...tealPrimary);
-  doc.rect(M2.left, y - 8, 4, 14, 'F');
-  doc.setFont('helvetica', 'bold').setFontSize(12.5).setTextColor(...darkNavy);
-  doc.text('Commission Calculation', M2.left + 9, y + 3);
-
-  y += 18;
-
   // Box - right edge must align exactly with table's right edge (reuse tableRightEdge)
   const boxW = 320;
   const boxX = tableRightEdge - boxW;

@@ -1,9 +1,7 @@
-import { useAuth } from '../hooks/useAuth'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import BillerInvoice from '../components/BillerInvoice'
 
 export function BillerInvoicePage() {
-  const { user } = useAuth()
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100">
