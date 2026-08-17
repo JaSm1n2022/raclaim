@@ -94,14 +94,32 @@ exports.handler = async function(event, context) {
 
     // Convert to JSON string (as expected by the parser functions from med-eft-api)
     const data = JSON.stringify(pdfData);
+    console.log('Data stringified, length:', data.length);
 
-    // Parse claim data
-    const medicaidMemberClaimPaidServiceInfo = parser.getMedicaidMemberPaid(data);
-    const medicaidMemberClaimDeniedServiceInfo = parser.getMedicaidMemberDenied(data);
-    const medicareMemberClaimPaidServiceInfo = parser.getMedicareMemberPaid(data);
-    const medicareMemberClaimDeniedServiceInfo = parser.getMedicareMemberDenied(data);
-    const adjustment = parser.getAdjustment(data);
-    const remittanceSummary = parser.getRemittanceSummary(data);
+    // Parse claim data with detailed logging
+    console.log('Parsing medicaid paid...');
+    const medicaidMemberClaimPaidServiceInfo = parser.getMedicaidMemberPaid(data) || [];
+    console.log('Medicaid paid parsed:', medicaidMemberClaimPaidServiceInfo.length, 'records');
+
+    console.log('Parsing medicaid denied...');
+    const medicaidMemberClaimDeniedServiceInfo = parser.getMedicaidMemberDenied(data) || [];
+    console.log('Medicaid denied parsed:', medicaidMemberClaimDeniedServiceInfo.length, 'records');
+
+    console.log('Parsing medicare paid...');
+    const medicareMemberClaimPaidServiceInfo = parser.getMedicareMemberPaid(data) || [];
+    console.log('Medicare paid parsed:', medicareMemberClaimPaidServiceInfo.length, 'records');
+
+    console.log('Parsing medicare denied...');
+    const medicareMemberClaimDeniedServiceInfo = parser.getMedicareMemberDenied(data) || [];
+    console.log('Medicare denied parsed:', medicareMemberClaimDeniedServiceInfo.length, 'records');
+
+    console.log('Parsing adjustment...');
+    const adjustment = parser.getAdjustment(data) || [];
+    console.log('Adjustment parsed:', adjustment.length, 'records');
+
+    console.log('Parsing remittance summary...');
+    const remittanceSummary = parser.getRemittanceSummary(data) || {};
+    console.log('Remittance summary parsed');
 
     // Calculate summaries
     const medicaidPaidSummary = parser.captureReport(
@@ -219,7 +237,10 @@ exports.handler = async function(event, context) {
 
   } catch (error) {
     console.error('Error processing PDF:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
+
     return {
       statusCode: 500,
       headers: {
@@ -228,7 +249,9 @@ exports.handler = async function(event, context) {
       },
       body: JSON.stringify({
         error: 'Failed to process PDF',
-        details: error.message
+        details: error.message,
+        errorName: error.name,
+        stack: error.stack
       })
     };
   }
