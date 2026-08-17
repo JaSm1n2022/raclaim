@@ -1,6 +1,6 @@
 const pdfParse = require('pdf-parse');
 const parser = require('../../api/utils/helperImsParser.cjs');
-const Busboy = require('busboy');
+const Busboy = require('@fastify/busboy');
 
 exports.handler = async function(event, context) {
   // Only allow POST requests
@@ -73,10 +73,22 @@ exports.handler = async function(event, context) {
     }
 
     const originalFilename = fileBuffer.filename;
-    console.log('Processing PDF:', originalFilename, 'Size:', fileBuffer.buffer.length, 'bytes');
+    const buffer = fileBuffer.buffer;
+
+    console.log('Processing PDF:', originalFilename);
+    console.log('Buffer size:', buffer.length, 'bytes');
+    console.log('Buffer is Buffer?', Buffer.isBuffer(buffer));
+    console.log('First 20 bytes:', buffer.slice(0, 20).toString('hex'));
+    console.log('PDF header check:', buffer.slice(0, 4).toString());
+
+    // Verify PDF header
+    if (buffer.slice(0, 4).toString() !== '%PDF') {
+      throw new Error('Invalid PDF file - missing PDF header. First bytes: ' + buffer.slice(0, 20).toString('hex'));
+    }
 
     // Parse PDF to text
-    const pdfData = await pdfParse(fileBuffer.buffer);
+    console.log('Starting PDF parse...');
+    const pdfData = await pdfParse(buffer);
     const pdfText = pdfData.text;
 
     console.log('PDF parsed successfully, text length:', pdfText.length);
