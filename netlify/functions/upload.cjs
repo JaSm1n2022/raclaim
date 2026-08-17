@@ -1,5 +1,6 @@
 const pdfParse = require('pdf-parse');
 const parser = require('../../api/utils/helperImsParser.cjs');
+const Busboy = require('busboy');
 
 exports.handler = async function(event, context) {
   // Only allow POST requests
@@ -15,65 +16,52 @@ exports.handler = async function(event, context) {
   }
 
   try {
-    // Get content type
-    const contentType = event.headers['content-type'] || event.headers['Content-Type'];
-
-    if (!contentType || !contentType.includes('multipart/form-data')) {
-      return {
-        statusCode: 400,
+    // Parse multipart form data using busboy
+    const fileBuffer = await new Promise((resolve, reject) => {
+      const busboy = Busboy({
         headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'Content-Type must be multipart/form-data' })
-      };
-    }
-
-    // Extract boundary from content-type header
-    const boundaryMatch = contentType.match(/boundary=([^;]+)/);
-    if (!boundaryMatch) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'No boundary found in Content-Type' })
-      };
-    }
-
-    const boundary = boundaryMatch[1];
-
-    // Parse the body - it comes as base64 when binary
-    const bodyBuffer = Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf8');
-
-    // Simple multipart parser for single file upload
-    const parts = bodyBuffer.toString('binary').split('--' + boundary);
-
-    let fileBuffer = null;
-    let originalFilename = 'Unknown';
-
-    // Find the file part
-    for (const part of parts) {
-      if (part.includes('Content-Type: application/pdf') || part.includes('filename=')) {
-        // Extract filename
-        const filenameMatch = part.match(/filename="([^"]+)"/);
-        if (filenameMatch) {
-          originalFilename = filenameMatch[1];
+          'content-type': event.headers['content-type'] || event.headers['Content-Type']
         }
+      });
 
-        // Extract file data - everything after the double CRLF
-        const dataStart = part.indexOf('\r\n\r\n');
-        if (dataStart !== -1) {
-          const dataEnd = part.lastIndexOf('\r\n');
-          const binaryData = part.substring(dataStart + 4, dataEnd > dataStart ? dataEnd : part.length);
-          fileBuffer = Buffer.from(binaryData, 'binary');
-          break;
+      let fileData = null;
+      let fileName = 'Unknown';
+      const chunks = [];
+
+      busboy.on('file', (fieldname, file, info) => {
+        fileName = info.filename;
+        console.log('Receiving file:', fileName);
+
+        file.on('data', (data) => {
+          chunks.push(data);
+        });
+
+        file.on('end', () => {
+          fileData = Buffer.concat(chunks);
+          console.log('File received, size:', fileData.length, 'bytes');
+        });
+      });
+
+      busboy.on('error', (error) => {
+        console.error('Busboy error:', error);
+        reject(error);
+      });
+
+      busboy.on('finish', () => {
+        if (!fileData) {
+          reject(new Error('No file data received'));
+        } else {
+          resolve({ buffer: fileData, filename: fileName });
         }
-      }
-    }
+      });
 
-    if (!fileBuffer) {
+      // Write the body to busboy
+      const bodyBuffer = Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf8');
+      busboy.write(bodyBuffer);
+      busboy.end();
+    });
+
+    if (!fileBuffer || !fileBuffer.buffer) {
       return {
         statusCode: 400,
         headers: {
@@ -84,10 +72,11 @@ exports.handler = async function(event, context) {
       };
     }
 
-    console.log('PDF file received:', originalFilename, 'Size:', fileBuffer.length, 'bytes');
+    const originalFilename = fileBuffer.filename;
+    console.log('Processing PDF:', originalFilename, 'Size:', fileBuffer.buffer.length, 'bytes');
 
     // Parse PDF to text
-    const pdfData = await pdfParse(fileBuffer);
+    const pdfData = await pdfParse(fileBuffer.buffer);
     const pdfText = pdfData.text;
 
     console.log('PDF parsed successfully, text length:', pdfText.length);
@@ -223,6 +212,8 @@ exports.handler = async function(event, context) {
         adjustment: adjustmentSummary.totalCnt || adjustment.length
       }
     };
+
+    console.log('Successfully processed PDF');
 
     return {
       statusCode: 200,
