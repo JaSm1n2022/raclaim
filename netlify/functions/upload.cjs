@@ -92,46 +92,49 @@ exports.handler = async function(event, context) {
 
     console.log('PDF parsed successfully, text length:', pdfText.length);
 
+    // Convert to JSON string (as expected by the parser functions from med-eft-api)
+    const data = JSON.stringify(pdfData);
+
     // Parse claim data
-    const medicaidMemberClaimPaidServiceInfo = parser.getMedicaidMemberPaid(pdfText);
-    const medicaidMemberClaimDeniedServiceInfo = parser.getMedicaidMemberDenied(pdfText);
-    const medicareMemberClaimPaidServiceInfo = parser.getMedicareMemberPaid(pdfText);
-    const medicareMemberClaimDeniedServiceInfo = parser.getMedicareMemberDenied(pdfText);
-    const adjustment = parser.getAdjustment(pdfText);
-    const remittanceSummary = parser.getRemittanceSummary(pdfText);
+    const medicaidMemberClaimPaidServiceInfo = parser.getMedicaidMemberPaid(data);
+    const medicaidMemberClaimDeniedServiceInfo = parser.getMedicaidMemberDenied(data);
+    const medicareMemberClaimPaidServiceInfo = parser.getMedicareMemberPaid(data);
+    const medicareMemberClaimDeniedServiceInfo = parser.getMedicareMemberDenied(data);
+    const adjustment = parser.getAdjustment(data);
+    const remittanceSummary = parser.getRemittanceSummary(data);
 
     // Calculate summaries
     const medicaidPaidSummary = parser.captureReport(
-      pdfText,
+      data,
       'TOTAL PROFESSIONAL SERVICE CLAIMS PAID:',
       '1REPORT:',
       1
     );
     const medicaidDeniedSummary = parser.captureReport(
-      pdfText,
+      data,
       'TOTAL PROFESSIONAL SERVICE CLAIMS DENIED:',
       '1REPORT:',
       1
     );
     const medicarePaidSummary = parser.captureReport(
-      pdfText,
+      data,
       'TOTAL MEDICARE CROSSOVER PROFESSIONAL SERVICE CLAIMS PAID:',
       '1REPORT:',
       1
     );
     const medicareDeniedSummary = parser.captureReport(
-      pdfText,
+      data,
       'TOTAL MEDICARE CROSSOVER PROFESSIONAL SERVICE CLAIMS DENIED:',
       '1REPORT:',
       1
     );
     const adjustmentSummary = parser.captureReport(
-      pdfText,
+      data,
       'TOTAL PROFESSIONAL SERVICE CLAIMS ADJ:',
       '1REPORT:',
       1
     );
-    const netPaymentData = parser.captureReport(pdfText, 'NET PAYMENT', '1REPORT:', 1);
+    const netPaymentData = parser.captureReport(data, 'NET PAYMENT', '1REPORT:', 1);
 
     // Calculate totals
     const totalPaid = medicaidMemberClaimPaidServiceInfo.length +
