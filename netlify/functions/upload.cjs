@@ -31,14 +31,19 @@ exports.handler = async function(event, context) {
       busboy.on('file', (fieldname, file, info) => {
         fileName = info.filename;
         console.log('Receiving file:', fileName);
+        console.log('Fieldname:', fieldname);
+        console.log('Info:', JSON.stringify(info));
 
         file.on('data', (data) => {
+          console.log('Chunk received, size:', data.length);
           chunks.push(data);
         });
 
         file.on('end', () => {
           fileData = Buffer.concat(chunks);
-          console.log('File received, size:', fileData.length, 'bytes');
+          console.log('File received, total chunks:', chunks.length);
+          console.log('File received, total size:', fileData.length, 'bytes');
+          console.log('First 50 bytes of buffer:', fileData.slice(0, 50).toString('hex'));
         });
       });
 
@@ -86,9 +91,20 @@ exports.handler = async function(event, context) {
       throw new Error('Invalid PDF file - missing PDF header. First bytes: ' + buffer.slice(0, 20).toString('hex'));
     }
 
-    // Parse PDF to text
+    // Parse PDF to text - try with error handling for problematic PDFs
     console.log('Starting PDF parse...');
-    const pdfData = await pdfParse(buffer);
+    let pdfData;
+    try {
+      pdfData = await pdfParse(buffer);
+    } catch (parseError) {
+      console.warn('First parse attempt failed:', parseError.message);
+      console.log('Retrying with stopAtErrors: false...');
+      // Retry with more lenient parsing
+      pdfData = await pdfParse(buffer, {
+        max: 0,
+        pagerender: undefined
+      });
+    }
     const pdfText = pdfData.text;
 
     console.log('PDF parsed successfully, text length:', pdfText.length);
