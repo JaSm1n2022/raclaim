@@ -200,6 +200,23 @@ export function MedicaidClaimsPage() {
     setAppliedDateRange(dateRange)
   }
 
+  const matchesFilters = (claim: Claim): boolean => {
+    if (statusFilter !== 'all') {
+      const statusLower = (claim.status || '').toLowerCase()
+      if (statusFilter === 'paid' && statusLower !== 'paid') return false
+      if (statusFilter === 'pending' && statusLower === 'paid') return false
+    }
+
+    const keyword = searchKeyword.trim().toLowerCase()
+    if (keyword) {
+      const clientMatch = (claim.client_name || '').toLowerCase().includes(keyword)
+      const disciplineMatch = (claim.employee || '').toLowerCase().includes(keyword)
+      if (!clientMatch && !disciplineMatch) return false
+    }
+
+    return true
+  }
+
   // Find duplicate claims within the currently loaded set (same Client + DOS + Code)
   const handleFindDuplicates = () => {
     const groupsByKey = new Map<string, Claim[]>()
@@ -1325,7 +1342,7 @@ export function MedicaidClaimsPage() {
               type="text"
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="Search by client, provider, code..."
+              placeholder="Search by client or discipline..."
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
@@ -1418,13 +1435,7 @@ export function MedicaidClaimsPage() {
                   <input
                     type="checkbox"
                     checked={(() => {
-                      const filteredClaims = claims.filter(claim => {
-                        if (statusFilter === 'all') return true
-                        const statusLower = (claim.status || '').toLowerCase()
-                        if (statusFilter === 'paid') return statusLower === 'paid'
-                        if (statusFilter === 'pending') return statusLower !== 'paid'
-                        return true
-                      })
+                      const filteredClaims = claims.filter(matchesFilters)
                       return selectedClaims.size === filteredClaims.length && filteredClaims.length > 0
                     })()}
                     onChange={(e) => handleSelectAll(e.target.checked)}
@@ -1468,13 +1479,7 @@ export function MedicaidClaimsPage() {
                 </tr>
               ) : (
                 claims
-                  .filter(claim => {
-                    if (statusFilter === 'all') return true
-                    const statusLower = (claim.status || '').toLowerCase()
-                    if (statusFilter === 'paid') return statusLower === 'paid'
-                    if (statusFilter === 'pending') return statusLower !== 'paid'
-                    return true
-                  })
+                  .filter(matchesFilters)
                   .map((claim) => (
                   <tr key={claim.id} className={`hover:bg-gray-50 ${duplicateClaimIds.has(claim.id) ? 'bg-red-50' : ''}`}>
                     <td className="px-4 py-3">
