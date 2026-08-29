@@ -63,6 +63,9 @@ export function MedicaidClaimsPage() {
   const [selectedClaims, setSelectedClaims] = useState<Set<number>>(new Set())
   const [searchKeyword, setSearchKeyword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [duplicateGroups, setDuplicateGroups] = useState<Claim[][]>([])
+  const [duplicateClaimIds, setDuplicateClaimIds] = useState<Set<number>>(new Set())
+  const [showDuplicatesModal, setShowDuplicatesModal] = useState(false)
 
   // Format date for display without timezone conversion
   const formatDateDisplay = (dateStr: string | null | undefined): string => {
@@ -195,6 +198,41 @@ export function MedicaidClaimsPage() {
 
   const handleApplyDateRange = () => {
     setAppliedDateRange(dateRange)
+  }
+
+  // Find duplicate claims within the currently loaded set (same Client + DOS + Code)
+  const handleFindDuplicates = () => {
+    const groupsByKey = new Map<string, Claim[]>()
+
+    claims.forEach((claim) => {
+      if (!claim.client_name || !claim.date_of_service || !claim.service_code) return
+      const key = [
+        claim.client_name.trim().toLowerCase(),
+        claim.date_of_service,
+        claim.service_code.trim().toLowerCase()
+      ].join('|')
+
+      const group = groupsByKey.get(key)
+      if (group) {
+        group.push(claim)
+      } else {
+        groupsByKey.set(key, [claim])
+      }
+    })
+
+    const duplicates = Array.from(groupsByKey.values()).filter((group) => group.length > 1)
+    const ids = new Set<number>()
+    duplicates.forEach((group) => group.forEach((claim) => ids.add(claim.id)))
+
+    setDuplicateGroups(duplicates)
+    setDuplicateClaimIds(ids)
+    setShowDuplicatesModal(true)
+
+    if (duplicates.length === 0) {
+      toast.success('No duplicate claims found')
+    } else {
+      toast.error(`Found ${duplicates.length} duplicate group(s) — ${ids.size} claims`)
+    }
   }
 
   const handleSelectAll = (checked: boolean) => {
@@ -1255,6 +1293,13 @@ export function MedicaidClaimsPage() {
                 <Plus className="w-4 h-4" />
                 Add Claim
               </button>
+              <button
+                onClick={handleFindDuplicates}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
+              >
+                <AlertTriangle className="w-4 h-4" />
+                Find Duplicates
+              </button>
             </div>
 
             {/* Grand Total */}
@@ -1431,7 +1476,7 @@ export function MedicaidClaimsPage() {
                     return true
                   })
                   .map((claim) => (
-                  <tr key={claim.id} className="hover:bg-gray-50">
+                  <tr key={claim.id} className={`hover:bg-gray-50 ${duplicateClaimIds.has(claim.id) ? 'bg-red-50' : ''}`}>
                     <td className="px-4 py-3">
                       <input
                         type="checkbox"
@@ -2060,6 +2105,80 @@ export function MedicaidClaimsPage() {
                 className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
               >
                 Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Find Duplicates Results Modal */}
+      {showDuplicatesModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-3xl w-full mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Duplicate Claims</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Matched on Client, DOS, and Code within the currently loaded claims
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDuplicatesModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto">
+              {duplicateGroups.length === 0 ? (
+                <p className="text-gray-600">No duplicate claims found.</p>
+              ) : (
+                <div className="space-y-6">
+                  {duplicateGroups.map((group, idx) => (
+                    <div key={idx} className="border border-amber-200 rounded-lg overflow-hidden">
+                      <div className="bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">
+                        {group[0].client_name} — DOS {formatDateDisplay(group[0].date_of_service)} — Code {group[0].service_code} ({group.length} claims)
+                      </div>
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase">Billed On</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase">Provider</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase">Billed</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase">Paid</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {group.map((claim) => (
+                            <tr key={claim.id}>
+                              <td className="px-3 py-2 text-gray-900">{formatDateDisplay(claim.billed_on)}</td>
+                              <td className="px-3 py-2 text-gray-900">{claim.provider}</td>
+                              <td className="px-3 py-2 text-gray-900">${(claim.billed_amt ?? 0).toFixed(2)}</td>
+                              <td className="px-3 py-2 text-gray-900">${(claim.paid_amt ?? 0).toFixed(2)}</td>
+                              <td className="px-3 py-2 text-gray-900">{claim.status || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-6 flex justify-end">
+              <button
+                onClick={() => setShowDuplicatesModal(false)}
+                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>
