@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { FileText, Upload, Plus, Download, CheckSquare, Edit2, Trash2, X, AlertCircle, AlertTriangle } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { FileText, Upload, Plus, Download, CheckSquare, Edit2, Trash2, X, AlertCircle, AlertTriangle, Search } from 'lucide-react'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
@@ -137,6 +137,9 @@ export function MedicaidClaimsPage() {
     status: 'Pending'
   })
   const [isSavingClaim, setIsSavingClaim] = useState(false)
+  const [clientSearchTerm, setClientSearchTerm] = useState('')
+  const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false)
+  const clientDropdownRef = useRef<HTMLDivElement>(null)
 
   // Patient cache
   const [patientsCache, setPatientsCache] = useState<Array<{ id: number, patientCd: string, name: string }>>([])
@@ -195,6 +198,16 @@ export function MedicaidClaimsPage() {
   useEffect(() => {
     fetchClaims()
   }, [user?.companyId, appliedDateRange.start, appliedDateRange.end])
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (clientDropdownRef.current && !clientDropdownRef.current.contains(event.target as Node)) {
+        setIsClientDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const handleApplyDateRange = () => {
     setAppliedDateRange(dateRange)
@@ -1028,6 +1041,8 @@ export function MedicaidClaimsPage() {
       comments: '',
       status: 'Pending'
     })
+    setClientSearchTerm('')
+    setIsClientDropdownOpen(false)
     setShowClaimModal(true)
   }
 
@@ -1081,6 +1096,8 @@ export function MedicaidClaimsPage() {
       comments: claim.comments || '',
       status: normalizedStatus
     })
+    setClientSearchTerm(claim.client_code || '')
+    setIsClientDropdownOpen(false)
     setShowClaimModal(true)
   }
 
@@ -1818,22 +1835,65 @@ export function MedicaidClaimsPage() {
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Client Code */}
-                <div>
+                <div ref={clientDropdownRef} className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Client Code <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={claimForm.client_code}
-                    onChange={(e) => handleClaimFormChange('client_code', e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">Select Client Code</option>
-                    {patientsCache.map(patient => (
-                      <option key={patient.id} value={patient.patientCd}>
-                        {patient.patientCd}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={clientSearchTerm}
+                      onChange={(e) => {
+                        setClientSearchTerm(e.target.value)
+                        setIsClientDropdownOpen(true)
+                        if (claimForm.client_code) {
+                          handleClaimFormChange('client_code', '')
+                        }
+                      }}
+                      onFocus={() => setIsClientDropdownOpen(true)}
+                      placeholder="Search client code or name..."
+                      className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  {isClientDropdownOpen && (
+                    <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {patientsCache
+                        .filter(patient => {
+                          const term = clientSearchTerm.trim().toLowerCase()
+                          if (!term) return true
+                          return (
+                            patient.patientCd.toLowerCase().includes(term) ||
+                            patient.name.toLowerCase().includes(term)
+                          )
+                        })
+                        .map(patient => (
+                          <button
+                            type="button"
+                            key={patient.id}
+                            onClick={() => {
+                              handleClaimFormChange('client_code', patient.patientCd)
+                              setClientSearchTerm(patient.patientCd)
+                              setIsClientDropdownOpen(false)
+                            }}
+                            className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm flex justify-between items-center"
+                          >
+                            <span className="font-medium text-gray-900">{patient.patientCd}</span>
+                            <span className="text-gray-500 ml-2 truncate">{patient.name}</span>
+                          </button>
+                        ))}
+                      {patientsCache.filter(patient => {
+                        const term = clientSearchTerm.trim().toLowerCase()
+                        if (!term) return true
+                        return (
+                          patient.patientCd.toLowerCase().includes(term) ||
+                          patient.name.toLowerCase().includes(term)
+                        )
+                      }).length === 0 && (
+                        <div className="px-4 py-2 text-sm text-gray-500">No matching clients</div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Service Code */}
