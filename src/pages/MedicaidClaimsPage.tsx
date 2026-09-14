@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { FileText, Upload, Plus, Download, CheckSquare, Edit2, Trash2, X, AlertCircle, AlertTriangle, Search } from 'lucide-react'
+import { FileText, Upload, Plus, Download, CheckSquare, Edit2, Trash2, X, AlertCircle, AlertTriangle, Search, Calculator } from 'lucide-react'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
@@ -455,6 +455,115 @@ export function MedicaidClaimsPage() {
     }
   }
 
+  const handleUpdateUnits = async () => {
+    if (selectedClaims.size === 0) {
+      toast.error('Please select claims to update')
+      return
+    }
+
+    if (!user?.companyId) {
+      toast.error('User company ID not found')
+      return
+    }
+
+    const claimsToUpdate = claims.filter(c => selectedClaims.has(c.id))
+
+    setLoading(true)
+    let updatedCount = 0
+    let skippedCount = 0
+
+    try {
+      const { data: servicesData, error: servicesError } = await supabase
+        .from('services')
+        .select('code, unit, rate, rate_per_min')
+        .eq('companyId', user.companyId)
+
+      if (servicesError) {
+        console.error('[UpdateUnits] Error fetching services:', servicesError)
+        toast.error('Failed to load service definitions')
+        return
+      }
+
+      console.log('[UpdateUnits] Raw services data from DB:', servicesData)
+
+      const serviceMap = new Map<string, { unit: number, rate: number, rate_per_min: number }>()
+      ;(servicesData || []).forEach((s: { code: string, unit: number | null, rate: number | null, rate_per_min: number | null }) => {
+        serviceMap.set(s.code, {
+          unit: s.unit ?? 0,
+          rate: s.rate ?? 0,
+          rate_per_min: s.rate_per_min ?? 0
+        })
+      })
+
+      for (const claim of claimsToUpdate) {
+        const service = serviceMap.get(claim.service_code)
+        const totalMinutes = calculateTotalMinutes(claim.dos_start, claim.dos_end)
+
+        console.log(`[UpdateUnits] Claim ${claim.id}: service_code="${claim.service_code}", dos_start="${claim.dos_start}" (type: ${typeof claim.dos_start}), dos_end="${claim.dos_end}" (type: ${typeof claim.dos_end}), totalMinutes=${totalMinutes}, service=`, service, `current claim.unit=${claim.unit}`)
+
+        if (!service) {
+          console.log(`[UpdateUnits] Claim ${claim.id} skipped: no matching service record found for code "${claim.service_code}"`)
+          skippedCount++
+          continue
+        }
+
+        let newUnit: number
+
+        if (service.rate_per_min > 0 && totalMinutes > 0) {
+          // rate_per_min defines minutes per unit: units = totalMinutes ÷ rate_per_min
+          newUnit = calculateUnitsFromMinutes(totalMinutes, service.rate_per_min)
+          console.log(`[UpdateUnits] Claim ${claim.id}: unit = ${totalMinutes} minutes ÷ ${service.rate_per_min} min/unit = ${newUnit}`)
+        } else {
+          // No rate_per_min (or no time data): fall back to the service's defined unit count
+          newUnit = service.unit > 0 ? service.unit : 1
+          console.log(`[UpdateUnits] Claim ${claim.id}: no rate_per_min/time, unit = service_unit (${newUnit})`)
+        }
+
+        const newBilledAmt = newUnit * service.rate
+        console.log(`[UpdateUnits] Claim ${claim.id}: unit ${claim.unit} -> ${newUnit}, billed_amt ${claim.billed_amt} -> ${newBilledAmt}`)
+
+        const { error } = await supabase
+          .from('claims')
+          .update({ unit: newUnit, billed_amt: newBilledAmt })
+          .eq('id', claim.id)
+
+        if (error) {
+          console.error(`[UpdateUnits] Error updating claim ${claim.id}:`, error)
+          skippedCount++
+          continue
+        }
+
+        updatedCount++
+      }
+
+      if (updatedCount > 0) {
+        toast.success(`Updated units for ${updatedCount} claim(s)`)
+      }
+
+      if (skippedCount > 0) {
+        toast(`${skippedCount} claim(s) skipped (no matching service record found)`, {
+          icon: '⚠️',
+          duration: 4000,
+        })
+      }
+
+      if (updatedCount === 0 && skippedCount === 0) {
+        toast.error('No claims were updated')
+      }
+
+      // Refresh claims list
+      fetchClaims()
+
+      // Clear selection
+      setSelectedClaims(new Set())
+    } catch (error: any) {
+      console.error('[UpdateUnits] Update error:', error)
+      toast.error('Failed to update units: ' + error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Parse date from various formats to YYYY-MM-DD
   const parseDate = (dateStr: any): string | null => {
     if (!dateStr) return null
@@ -502,32 +611,59 @@ export function MedicaidClaimsPage() {
     }
   }
 
+  // Convert a time value (string, Excel serial number, or Date) to minutes since midnight
+  const timeValueToMinutes = (value: unknown): number | null => {
+    if (value === null || value === undefined || value === '') return null
+
+    if (value instanceof Date) {
+      return value.getHours() * 60 + value.getMinutes()
+    }
+
+    if (typeof value === 'number') {
+      // Excel stores times as a fraction of a 24-hour day (e.g., 0.5 = 12:00 PM)
+      const fraction = value - Math.floor(value)
+      return Math.round(fraction * 24 * 60)
+    }
+
+    const str = String(value).trim()
+
+    // 12-hour format: "1:00 PM", "01:00PM", "1:00:00 PM"
+    let match = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)$/i)
+    if (match) {
+      let hours = parseInt(match[1], 10)
+      const minutes = parseInt(match[2], 10)
+      const period = match[4].toUpperCase()
+      if (period === 'PM' && hours !== 12) hours += 12
+      if (period === 'AM' && hours === 12) hours = 0
+      return hours * 60 + minutes
+    }
+
+    // 24-hour format: "13:00", "13:00:00"
+    match = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+    if (match) {
+      return parseInt(match[1], 10) * 60 + parseInt(match[2], 10)
+    }
+
+    return null
+  }
+
   // Calculate total minutes from dos_start and dos_end
-  const calculateTotalMinutes = (startTime: string, endTime: string): number => {
-    if (!startTime || !endTime) return 0
+  const calculateTotalMinutes = (startTime: unknown, endTime: unknown): number => {
+    if (startTime === '' || startTime === null || startTime === undefined) return 0
+    if (endTime === '' || endTime === null || endTime === undefined) return 0
 
     try {
-      // Parse time strings (e.g., "13:00" or "1:00 PM")
-      const parseTime = (timeStr: string): { hours: number, minutes: number } | null => {
-        // Handle 24-hour format (13:00)
-        const match24 = timeStr.match(/^(\d{1,2}):(\d{2})$/)
-        if (match24) {
-          return { hours: parseInt(match24[1]), minutes: parseInt(match24[2]) }
-        }
-        return null
+      const startMinutes = timeValueToMinutes(startTime)
+      const endMinutes = timeValueToMinutes(endTime)
+
+      if (startMinutes === null || endMinutes === null) {
+        console.log('[calculateTotalMinutes] Unable to parse time value:', { startTime, endTime })
+        return 0
       }
 
-      const start = parseTime(startTime)
-      const end = parseTime(endTime)
-
-      if (!start || !end) return 0
-
-      // Calculate total minutes
-      const startMinutes = start.hours * 60 + start.minutes
-      const endMinutes = end.hours * 60 + end.minutes
-      const totalMinutes = endMinutes - startMinutes
-
-      if (totalMinutes <= 0) return 0
+      let totalMinutes = endMinutes - startMinutes
+      // Handle sessions that cross midnight
+      if (totalMinutes < 0) totalMinutes += 24 * 60
 
       return totalMinutes
     } catch {
@@ -535,12 +671,10 @@ export function MedicaidClaimsPage() {
     }
   }
 
-  // Calculate units based on service unit definition and total minutes
-  const calculateUnits = (totalMinutes: number, serviceUnit: number): number => {
-    if (!totalMinutes || !serviceUnit) return 0
-    // serviceUnit defines minutes per unit (e.g., 15 means 1 unit = 15 minutes)
-    // So units = totalMinutes / serviceUnit
-    return Math.round(totalMinutes / serviceUnit)
+  // Calculate units from total minutes and the service's rate_per_min (minutes per unit)
+  const calculateUnitsFromMinutes = (totalMinutes: number, ratePerMin: number): number => {
+    if (!totalMinutes || !ratePerMin) return 0
+    return Math.round(totalMinutes / ratePerMin)
   }
 
   // Lookup service by code to get service_id, unit definition, and rate
@@ -555,14 +689,14 @@ export function MedicaidClaimsPage() {
       console.log('[lookupService] Found service:', match)
       return {
         service_id: match.id,
-        service_unit: match.unit || 15, // Default to 15 minutes per unit if not specified
+        service_unit: match.unit || 0,
         rate: match.rate || 0,
         rate_per_min: match.rate_per_min || 0
       }
     }
 
     console.log('[lookupService] Service not found:', serviceCode)
-    return { service_id: null, service_unit: 15, rate: 0, rate_per_min: 0 }
+    return { service_id: null, service_unit: 0, rate: 0, rate_per_min: 0 }
   }
 
   // Fetch all services for the company
@@ -817,25 +951,26 @@ export function MedicaidClaimsPage() {
         // Calculate total minutes from dos_start and dos_end
         const totalMinutes = calculateTotalMinutes(dos_start, dos_end)
 
-        // Calculate units and billed amount
+        console.log(`[Parsing Row ${i}] dos_start: "${dos_start}" (type: ${typeof dos_start}), dos_end: "${dos_end}" (type: ${typeof dos_end}), totalMinutes: ${totalMinutes}`)
+        console.log(`[Parsing Row ${i}] service_code: "${service_code}", rate_per_min: ${rate_per_min}, service_unit: ${service_unit}, rate: ${rate}`)
+
         let calculated_unit = 0
         let billed_amt = 0
 
-        if (rate_per_min > 0) {
-          // rate_per_min defines minutes per unit (e.g., 15 means 1 unit = 15 minutes)
-          // Calculate units: totalMinutes ÷ rate_per_min
-          calculated_unit = calculateUnits(totalMinutes, rate_per_min)
-          // Billed amount: units × rate
-          billed_amt = calculated_unit * rate
-          console.log(`[Parsing Row ${i}] With rate_per_min: ${totalMinutes} minutes ÷ ${rate_per_min} min/unit = ${calculated_unit} units × $${rate}/unit = $${billed_amt}`)
+        if (rate_per_min > 0 && totalMinutes > 0) {
+          // rate_per_min defines minutes per unit: units = totalMinutes ÷ rate_per_min
+          calculated_unit = calculateUnitsFromMinutes(totalMinutes, rate_per_min)
+          console.log(`[Parsing Row ${i}] unit = ${totalMinutes} minutes ÷ ${rate_per_min} min/unit = ${calculated_unit}`)
         } else {
-          // If no rate_per_min, unit is always 1 and billed_amt is just the rate
-          calculated_unit = 1
-          billed_amt = rate
-          console.log(`[Parsing Row ${i}] No rate_per_min: unit = 1, billed_amt = $${rate}`)
+          // No rate_per_min (or no time data): fall back to the service's defined unit count
+          calculated_unit = service_unit > 0 ? service_unit : 1
+          console.log(`[Parsing Row ${i}] No rate_per_min/time: unit = service_unit (${calculated_unit})`)
         }
 
-        console.log(`[Parsing Row ${i}] service_code: "${service_code}", service_id: ${service_id}, totalMinutes: ${totalMinutes}, unit: ${calculated_unit}, billed_amt: ${billed_amt}`)
+        billed_amt = calculated_unit * rate
+        console.log(`[Parsing Row ${i}] billed_amt = ${calculated_unit} unit(s) × $${rate}/unit = $${billed_amt}`)
+
+        console.log(`[Parsing Row ${i}] FINAL service_code: "${service_code}", service_id: ${service_id}, unit: ${calculated_unit}, billed_amt: ${billed_amt}`)
         console.log(`[Parsing Row ${i}] Blocking issues:`, blockingIssues)
         console.log(`[Parsing Row ${i}] Soft warnings:`, softWarnings)
 
@@ -1111,9 +1246,9 @@ export function MedicaidClaimsPage() {
       const end = updatedForm.dos_end
       const serviceCode = updatedForm.service_code
 
-      console.log('[FormChange] Checking auto-calc:', { start, end, serviceCode })
+      console.log('[FormChange] dos_start:', start, '(type:', typeof start, ') dos_end:', end, '(type:', typeof end, ')')
 
-      if (start && end && serviceCode) {
+      if (serviceCode) {
         const totalMinutes = calculateTotalMinutes(start, end)
         console.log('[FormChange] Total minutes:', totalMinutes)
 
@@ -1123,17 +1258,18 @@ export function MedicaidClaimsPage() {
         let calculatedUnit = 0
         let billedAmt = 0
 
-        if (rate_per_min > 0) {
-          // rate_per_min is minutes per unit (e.g., 15 means 1 unit = 15 minutes)
-          calculatedUnit = calculateUnits(totalMinutes, rate_per_min)
-          billedAmt = calculatedUnit * rate
-          console.log('[FormChange] With rate_per_min:', { calculatedUnit, billedAmt })
+        if (rate_per_min > 0 && totalMinutes > 0) {
+          // rate_per_min defines minutes per unit: units = totalMinutes ÷ rate_per_min
+          calculatedUnit = calculateUnitsFromMinutes(totalMinutes, rate_per_min)
+          console.log('[FormChange] unit = totalMinutes ÷ rate_per_min:', { totalMinutes, rate_per_min, calculatedUnit })
         } else {
-          // No rate_per_min, unit = 1, billed_amt = rate
-          calculatedUnit = 1
-          billedAmt = rate
-          console.log('[FormChange] No rate_per_min:', { calculatedUnit, billedAmt })
+          // No rate_per_min (or no time data): fall back to the service's defined unit count
+          calculatedUnit = service_unit > 0 ? service_unit : 1
+          console.log('[FormChange] No rate_per_min/time, unit = service_unit:', calculatedUnit)
         }
+
+        billedAmt = calculatedUnit * rate
+        console.log('[FormChange] billed_amt = unit × rate:', { calculatedUnit, rate, billedAmt })
 
         setClaimForm(prev => ({
           ...prev,
@@ -1429,6 +1565,14 @@ export function MedicaidClaimsPage() {
               >
                 <CheckSquare className="w-4 h-4" />
                 {loading ? 'Updating...' : 'Update EFT'}
+              </button>
+              <button
+                onClick={handleUpdateUnits}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                <Calculator className="w-4 h-4" />
+                {loading ? 'Updating...' : 'Update Units'}
               </button>
               <button
                 onClick={handleExport}
