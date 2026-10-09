@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Code, Users, Plus, Upload, X, Loader2 } from 'lucide-react'
+import { Settings, Code, Users, Plus, Upload, X, Loader2, Pencil, Trash2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import toast from 'react-hot-toast'
 import { useAuth } from '../hooks/useAuth'
@@ -484,16 +484,22 @@ export function SettingsPage() {
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => openEditPatientForm(patient)}
-                                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                title="Edit patient"
+                                className="text-blue-600 hover:text-blue-800"
                               >
-                                Edit
+                                <Pencil className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => handleDeletePatient(patient)}
                                 disabled={deletingPatientId === patient.id}
-                                className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50"
+                                title="Delete patient"
+                                className="text-red-600 hover:text-red-800 disabled:opacity-50"
                               >
-                                {deletingPatientId === patient.id ? 'Deleting...' : 'Delete'}
+                                {deletingPatientId === patient.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
                               </button>
                             </div>
                           </td>
